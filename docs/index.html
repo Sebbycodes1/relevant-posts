@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Relevant Posts - Live Brief</title>
+  <style>
+    :root {
+      --ink: #17211d;
+      --muted: #65706a;
+      --faint: #8a938e;
+      --paper: #f3f0e8;
+      --surface: #fffdf8;
+      --surface-2: #ebe7dc;
+      --line: #d7d1c4;
+      --green: #174b3a;
+      --green-2: #286853;
+      --green-soft: #dce9e1;
+      --gold: #b98535;
+      --gold-soft: #f4ead4;
+      --red: #8a443c;
+      --red-soft: #f1dfdb;
+      --shadow: 0 12px 34px rgba(38, 45, 41, .08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 80% -15%, rgba(185, 133, 53, .11), transparent 33rem),
+        var(--paper);
+      font: 14px/1.5 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    a { color: inherit; }
+    :focus-visible { outline: 3px solid rgba(185, 133, 53, .5); outline-offset: 2px; }
+
+    .shell { min-height: 100vh; }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 15px 26px;
+      background: rgba(243, 240, 232, .94);
+      border-bottom: 1px solid rgba(23, 75, 58, .12);
+      backdrop-filter: blur(14px);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 245px; }
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: var(--green);
+      color: #fff;
+      font: 700 14px/1 Georgia, serif;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.14);
+    }
+    .brand strong { display: block; font: 700 18px/1.05 Georgia, "Times New Roman", serif; letter-spacing: -.01em; }
+    .nav { display: flex; align-items: center; justify-content: center; gap: 5px; }
+    .nav button {
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      padding: 8px 13px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .nav button:hover { background: rgba(23,75,58,.06); color: var(--ink); }
+    .nav button.active { background: var(--green); color: white; }
+    .top-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 245px; }
+    .offline-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 10px;
+      border: 1px solid #cbbf9f;
+      border-radius: 999px;
+      background: var(--gold-soft);
+      color: #76531e;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .offline-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); }
+    .icon-button, .button {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      cursor: pointer;
+      transition: transform .15s ease, border-color .15s ease, background .15s ease;
+    }
+    .icon-button { width: 36px; height: 36px; display: grid; place-items: center; }
+    .icon-button:hover, .button:hover { transform: translateY(-1px); border-color: #9ba9a1; }
+    .button { padding: 9px 13px; font-size: 12px; font-weight: 700; }
+    .button.primary { background: var(--green); border-color: var(--green); color: white; }
+    .button.ghost { background: transparent; }
+    .button.danger { color: var(--red); }
+
+    .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); }
+    .sidebar {
+      position: sticky;
+      top: 66px;
+      align-self: start;
+      height: calc(100vh - 66px);
+      padding: 28px 20px 28px 26px;
+      border-right: 1px solid var(--line);
+      overflow: auto;
+    }
+    .sidebar-section { margin-bottom: 28px; }
+    .section-label {
+      margin: 0 0 10px;
+      color: var(--faint);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .search-wrap { position: relative; }
+    .search-wrap::before { content: "⌕"; position: absolute; left: 11px; top: 8px; color: var(--faint); font-size: 18px; line-height: 1; }
+    .search {
+      width: 100%;
+      height: 38px;
+      padding: 0 12px 0 34px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255,253,248,.75);
+      color: var(--ink);
+    }
+    .filter-list { display: grid; gap: 4px; }
+    .filter-button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      text-align: left;
+    }
+    .filter-button:hover { background: rgba(255,255,255,.5); color: var(--ink); }
+    .filter-button.active { background: var(--green-soft); color: var(--green); font-weight: 700; }
+    .filter-count { color: var(--faint); font-size: 11px; }
+    .filter-button.active .filter-count { color: var(--green-2); }
+    .threshold { display: grid; gap: 10px; }
+    .threshold-row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+    input[type="range"] { width: 100%; accent-color: var(--green); }
+    .local-note {
+      padding: 12px;
+      border: 1px solid #d9c9a6;
+      border-radius: 12px;
+      background: rgba(244,234,212,.7);
+      color: #69502a;
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    .main { min-width: 0; padding: 34px clamp(24px, 4vw, 62px) 70px; }
+    .view { display: none; }
+    .view.active { display: block; animation: enter .22s ease both; }
+    @keyframes enter { from { opacity: 0; transform: translateY(4px); } }
+    .masthead { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+    .eyebrow { color: var(--green-2); font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; }
+    h1 { max-width: 850px; margin: 7px 0 8px; font-size: clamp(30px, 4.1vw, 52px); line-height: 1.02; letter-spacing: -.035em; font-weight: 500; }
+    .lede { max-width: 760px; margin: 0; color: var(--muted); font-size: 15px; }
+    .masthead-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255,253,248,.72);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .stat { padding: 16px 18px; border-right: 1px solid var(--line); }
+    .stat:last-child { border-right: 0; }
+    .stat-value { font: 600 22px/1 Georgia, serif; }
+    .stat-label { margin-top: 6px; color: var(--muted); font-size: 11px; }
+
+    .feed-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 20px 0 11px; }
+    .feed-toolbar h2 { margin: 0; font-size: 22px; font-weight: 500; }
+    .ranked-count { margin-left: 7px; color: var(--muted); font: 700 11px/1 Arial, sans-serif; }
+    .feed-meta { color: var(--muted); font-size: 12px; text-align: right; }
+    .visibility-note { color: #76531e; font-weight: 700; }
+    .freshness-badge { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 5px; padding: 4px 8px; border-radius: 999px; background: var(--green-soft); color: var(--green); font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+    .freshness-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .freshness-badge.stale { background: var(--gold-soft); color: #76531e; }
+    .signal-list { display: grid; gap: 12px; }
+    .signal-card {
+      display: grid;
+      grid-template-columns: 68px minmax(0, 1fr);
+      gap: 20px;
+      padding: 22px 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 6px 20px rgba(41,48,44,.035);
+      transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+    }
+    .signal-card:hover { transform: translateY(-1px); border-color: #b8b1a4; box-shadow: var(--shadow); }
+    .score {
+      width: 58px;
+      height: 58px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      border: 5px solid var(--green-soft);
+      background: #f8faf7;
+      color: var(--green);
+      font: 700 21px/1 Georgia, serif;
+    }
+    .score.secondary { border-color: var(--gold-soft); color: #7b5925; }
+    .signal-main { min-width: 0; }
+    .source-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 12px; }
+    .source-name { color: var(--green); font-weight: 800; }
+    .platform-tag { padding: 2px 7px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .quality-tier { padding: 2px 7px; border-radius: 999px; font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+    .quality-tier.brief { background: var(--green); color: #fff; }
+    .quality-tier.priority { background: #153f32; color: #fff; }
+    .quality-tier.watchlist { border: 1px solid #d9c9a6; background: var(--gold-soft); color: #76531e; }
+    .quality-tier.breaking { background: #8b3a2f; color: #fff; }
+    .quality-tier.major { background: #153f32; color: #fff; }
+    .demo-tag { padding: 2px 7px; border: 1px solid #d9c9a6; border-radius: 999px; background: var(--gold-soft); color: #76531e; font-size: 9px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+    .signal-card h3 { margin: 8px 0 9px; font-size: clamp(21px, 2vw, 26px); line-height: 1.2; font-weight: 500; }
+    .detail-summary { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .detail-grid { display: grid; grid-template-columns: minmax(110px,.7fr) minmax(180px,1.4fr) minmax(150px,1fr); gap: 14px; margin: 12px 0; }
+    .detail-item { min-width: 0; }
+    .detail-label { display: block; margin-bottom: 4px; color: var(--faint); font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    .detail-value { color: var(--ink); font-size: 11px; font-weight: 700; line-height: 1.45; }
+    .entity-list { display: flex; flex-wrap: wrap; gap: 4px; }
+    .entity-chip { display: inline-flex; padding: 2px 6px; border-radius: 999px; background: #e2ebe6; color: var(--green); font-size: 9px; font-weight: 800; }
+    .evidence-good { color: var(--green); }
+    .evidence-caution { color: #8a5d18; }
+    .evidence-note { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .evidence-links { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: 5px; }
+    .evidence-links a { color: var(--green); font-weight: 800; }
+    .implication { margin: 0; padding-left: 12px; border-left: 2px solid var(--gold); color: #39423e; font-size: 13px; line-height: 1.5; }
+    .implication b { color: var(--ink); }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
+    .tag { padding: 4px 8px; border-radius: 999px; background: var(--green-soft); color: var(--green); font-size: 10px; font-weight: 700; }
+    .signal-details { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+    .signal-details summary { width: fit-content; color: var(--green); cursor: pointer; font-size: 11px; font-weight: 800; }
+    .signal-details summary:hover { text-decoration: underline; }
+    .details-breakdown { max-width: 460px; margin-top: 12px; }
+    .breakdown { width: 100%; display: grid; gap: 7px; }
+    .break-row { display: grid; grid-template-columns: 76px 1fr 28px; align-items: center; gap: 7px; color: var(--faint); font-size: 10px; }
+    .bar { height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+    .bar > span { display: block; height: 100%; border-radius: inherit; background: var(--green-2); }
+    .card-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .card-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+    .mini-action { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 6px 8px; cursor: pointer; color: var(--muted); font-size: 10px; }
+    .mini-action:hover, .mini-action.active { border-color: #91aa9c; background: var(--green-soft); color: var(--green); }
+    .mini-action.dismiss:hover { border-color: #d6aaa3; background: var(--red-soft); color: var(--red); }
+    .article-link { display: inline-flex; align-items: center; gap: 5px; color: var(--green); font-size: 11px; font-weight: 800; text-decoration: none; }
+    .article-link:hover { text-decoration: underline; }
+    .empty { padding: 50px 20px; border: 1px dashed #bdb5a8; border-radius: var(--radius); text-align: center; color: var(--muted); background: rgba(255,255,255,.35); }
+
+    .page-head { max-width: 760px; margin-bottom: 28px; }
+    .page-head h1 { font-size: clamp(34px, 4vw, 48px); }
+    .content-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .panel { padding: 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: 0 6px 20px rgba(41,48,44,.035); }
+    .panel h2 { margin: 0 0 8px; font-size: 22px; font-weight: 500; }
+    .panel > p { margin: 0 0 16px; color: var(--muted); }
+    .source-table { grid-column: 1 / -1; overflow: hidden; padding: 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 13px 16px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--faint); background: #faf8f2; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+    td { font-size: 12px; }
+    .source-title { font-weight: 800; color: var(--green); }
+    .coverage { color: var(--muted); }
+    .tier { display: inline-flex; padding: 3px 7px; border-radius: 999px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+    .tier.core { background: var(--green-soft); color: var(--green); }
+    .tier.context { background: var(--gold-soft); color: #76531e; }
+    .tier.event { background: #e8e5ef; color: #56446f; }
+    .weight-list { display: grid; gap: 12px; }
+    .weight-card { display: grid; grid-template-columns: 58px 1fr; gap: 14px; align-items: start; }
+    .weight-number { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 14px; background: var(--green); color: white; font: 600 20px/1 Georgia, serif; }
+    .weight-card h3 { margin: 2px 0 4px; font-size: 17px; font-weight: 600; }
+    .weight-card p { margin: 0; color: var(--muted); font-size: 12px; }
+    .cutoff { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+    .cutoff:last-child { border-bottom: 0; }
+    .cutoff strong { font: 600 22px/1 Georgia, serif; }
+    .penalty-list { margin: 0; padding-left: 18px; color: var(--muted); }
+    .penalty-list li { margin: 8px 0; }
+
+    .toast {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 20;
+      max-width: 340px;
+      padding: 12px 15px;
+      border-radius: 12px;
+      background: var(--ink);
+      color: white;
+      box-shadow: 0 16px 45px rgba(0,0,0,.22);
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: .2s ease;
+      font-size: 12px;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .mobile-filters { display: none; margin-bottom: 16px; }
+
+    @media (max-width: 1020px) {
+      .top-actions { min-width: 0; }
+      .brand { min-width: 0; }
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; display: none; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+      .sidebar.open { display: block; }
+      .mobile-filters { display: inline-flex; }
+      .signal-card { grid-template-columns: 68px minmax(0, 1fr); }
+      .breakdown { max-width: 420px; }
+    }
+    @media (max-width: 760px) {
+      .topbar { padding: 12px 16px; flex-wrap: wrap; }
+      .brand { flex: 1; }
+      .offline-pill { display: none; }
+      .nav { order: 3; width: 100%; justify-content: flex-start; overflow-x: auto; }
+      .nav button { white-space: nowrap; }
+      .main { padding: 25px 16px 55px; }
+      .masthead { align-items: flex-start; flex-direction: column; }
+      .masthead-actions { justify-content: flex-start; }
+      .status-strip { grid-template-columns: 1fr 1fr; }
+      .stat:nth-child(2) { border-right: 0; }
+      .stat:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .signal-card { grid-template-columns: 1fr; }
+      .score { width: 54px; height: 54px; }
+      .feed-toolbar { align-items: flex-start; flex-direction: column; }
+      .feed-meta { text-align: left; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .card-footer { align-items: flex-start; flex-direction: column; }
+      .card-actions { justify-content: flex-start; }
+      .content-grid { grid-template-columns: 1fr; }
+      .source-table { overflow-x: auto; }
+      table { min-width: 720px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">RP</div>
+        <div><strong>Relevant Posts</strong></div>
+      </div>
+      <nav class="nav" aria-label="Dashboard sections">
+        <button class="active" data-view="feed">Morning brief</button>
+        <button data-view="sources">Source book</button>
+        <button data-view="rubric">Scoring rubric</button>
+      </nav>
+      <div class="top-actions">
+        <span class="offline-pill">Live snapshot</span>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-section">
+          <p class="section-label">Find a signal</p>
+          <div class="search-wrap"><input class="search" id="searchInput" type="search" placeholder="Source, topic, company…" aria-label="Search signals"></div>
+        </div>
+
+        <div class="sidebar-section">
+          <p class="section-label">Platform</p>
+          <div class="filter-list" id="platformFilters"></div>
+        </div>
+
+        <div class="sidebar-section">
+          <p class="section-label">Sector</p>
+          <div class="filter-list" id="sectorFilters"></div>
+        </div>
+
+        <div class="sidebar-section threshold">
+          <div class="threshold-row"><span>Display threshold</span><strong id="thresholdValue">60</strong></div>
+          <input id="thresholdInput" type="range" min="55" max="95" step="1" value="60" aria-label="Minimum quality score">
+          <div class="threshold-row"><span>Broad context</span><span>Only highest signal</span></div>
+        </div>
+
+        <div class="sidebar-section">
+          <button class="button ghost" id="resetButton">Reset filters</button>
+        </div>
+
+        <div class="local-note">
+          This shared prototype is a read-only snapshot. Feedback stays in this browser; source refreshes are generated separately.
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="view active" id="feedView">
+          <button class="button ghost mobile-filters" id="mobileFilters">Filters</button>
+          <div class="masthead">
+            <div>
+              <div class="eyebrow">Broad web + X + newsletters / RSS</div>
+              <h1>The latest in the AI stack</h1>
+              <p class="lede">A ranked view of developments that may matter across models, compute, memory, power and hyperscale infrastructure.</p>
+            </div>
+          </div>
+
+          <div class="feed-toolbar">
+            <h2>Ranked developments <span class="ranked-count" id="signalCount">0 shown</span></h2>
+            <div class="feed-meta"><span class="freshness-badge" id="freshnessBadge">Illustrative</span><br><span id="feedMode">Broad web + X + newsletters / RSS - sources refreshed Jul 27, 2026 3:35 PM</span><br><span class="visibility-note" id="visibilityNote"></span></div>
+          </div>
+          <div class="signal-list" id="signalList" aria-live="polite"></div>
+        </section>
+
+        <section class="view" id="sourcesView">
+          <div class="page-head">
+            <div class="eyebrow">Initial coverage universe</div>
+            <h1>Broad event discovery, backed by a curated source book.</h1>
+            <p class="lede">The broad scan looks across X, official sites, model repositories and reputable reporting. The watchlist then adds depth from primary research, technical operators and infrastructure specialists.</p>
+          </div>
+          <div class="content-grid">
+            <section class="panel">
+              <h2>Editorial principle</h2>
+              <p>Events are discovered and verified before individual posts are ranked. Related coverage is clustered into one development, and the first screen is diversified by issuer.</p>
+            </section>
+            <section class="panel">
+              <h2>Prototype boundary</h2>
+              <p>This standalone edition includes the latest locally collected X and newsletter/RSS results that cleared the scoring workflow.</p>
+            </section>
+            <section class="panel source-table">
+              <table>
+                <thead><tr><th>Source</th><th>Platform</th><th>Primary coverage</th><th>Role</th></tr></thead>
+                <tbody id="sourceRows"></tbody>
+              </table>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="rubricView">
+          <div class="page-head">
+            <div class="eyebrow">Quality control</div>
+            <h1>A conservative 100-point hurdle against slop.</h1>
+            <p class="lede">Significance leads the ranking, but high scores require evidence—not merely a credible author. Ninety-plus is reserved for rare, verified developments with clear first-order consequences.</p>
+          </div>
+          <div class="content-grid">
+            <section class="panel">
+              <h2>Scoring weights</h2>
+              <div class="weight-list">
+                <div class="weight-card"><div class="weight-number">40</div><div><h3>Significance</h3><p>Material change to products, economics, capacity, policy or competitive positioning.</p></div></div>
+                <div class="weight-card"><div class="weight-number">25</div><div><h3>Credibility</h3><p>Primary evidence, track record, specificity and corroboration from independent sources.</p></div></div>
+                <div class="weight-card"><div class="weight-number">20</div><div><h3>Timeliness</h3><p>How quickly the item reaches the desk relative to the underlying event.</p></div></div>
+                <div class="weight-card"><div class="weight-number">15</div><div><h3>Analytical depth</h3><p>Explanatory value, mechanism, quantification and links to the broader AI stack.</p></div></div>
+              </div>
+            </section>
+            <section class="panel">
+              <h2>Publishing thresholds</h2>
+              <div class="cutoff"><div><strong>90+</strong><div class="coverage">Exceptional · verified, material and likely market-relevant</div></div><span class="tier core">Rare</span></div>
+              <div class="cutoff"><div><strong>80–89</strong><div class="coverage">Core signal · major confirmed development</div></div><span class="tier core">Priority</span></div>
+              <div class="cutoff"><div><strong>70–79</strong><div class="coverage">Morning brief · material enough for active review</div></div><span class="tier core">Brief</span></div>
+              <div class="cutoff"><div><strong>60–69</strong><div class="coverage">Watchlist · potentially useful, but evidence or impact is less certain</div></div><span class="tier context">Watch</span></div>
+              <div class="cutoff"><div><strong>&lt;60</strong><div class="coverage">Suppressed by default</div></div><span class="tier">Filtered</span></div>
+            </section>
+            <section class="panel">
+              <h2>Hard score caps</h2>
+              <ul class="penalty-list">
+                <li>Rumor: maximum 59 and excluded from breaking-event coverage</li>
+                <li>No primary evidence or independent confirmation: maximum 69</li>
+                <li>Commentary without a new underlying event: maximum 74</li>
+                <li>Speculative analysis without primary evidence: maximum 79</li>
+                <li>90+ requires primary evidence, independent confirmation and a measurable first-order impact</li>
+                <li>The post is scored—not the fame or credibility of the author</li>
+                <li>Verified major events remain visible even when their honest score is below the display threshold</li>
+              </ul>
+            </section>
+            <section class="panel">
+              <h2>Automatic penalties</h2>
+              <ul class="penalty-list">
+                <li>Recycled news without new information</li>
+                <li>Unsupported certainty or anonymous claims without corroboration</li>
+                <li>Promotion without technical or commercial substance</li>
+                <li>Engagement bait, vagueposting and personality drama</li>
+                <li>Duplicate coverage of the same underlying event</li>
+              </ul>
+            </section>
+            <section class="panel">
+              <h2>Human feedback loop</h2>
+              <p>Use Save, Useful and Dismiss to tune the queue as you review it. Feedback stays on this device.</p>
+              <button class="button danger" id="clearFeedbackButton">Clear local feedback</button>
+            </section>
+            <section class="panel">
+              <h2>PM evidence discipline</h2>
+              <ul class="penalty-list">
+                <li>“Primary evidence” means the item itself supplies first-party data, specifications or documentation</li>
+                <li>“Independently corroborated” requires a separate source and a direct supporting link</li>
+                <li>Repeated coverage is clustered, but repetition alone does not count as confirmation</li>
+                <li>Explicit-name tags aid routing; they are not automated trade recommendations</li>
+              </ul>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    const demoSignals = [{"eventKey":"openai-work-at-frontier-report-2026-07-27","id":"evt-20260727-openai-work-report","source":"OpenAI","handle":"@OpenAI","platform":"Web","age":"7h","publishedAt":"2026-07-27T12:00:00.0000000Z","score":80,"title":"OpenAI Economic Research publishes Work at the Frontier report","summary":"Analysis of 800k+ US ChatGPT work messages finds 16.8% of work-related and 43.5% of occupation-specific messages involve tasks outside the user’s own occupation, documenting task crossover.","implication":"What does measurable task crossover imply for labor-market reorganization, job design and productivity measurement?","sectors":["Labs","Software","Policy"],"significance":24,"credibility":24,"timeliness":19,"depth":13,"postType":"research","eventType":"research","entities":["OpenAI"],"whyNow":"Fresh proprietary usage data quantifies real-time occupational boundary shifts driven by AI.","evidenceSummary":"Official OpenAI company page and linked PDF report with methodology and occupation-level statistics released July 27.","corroboratingUrls":[],"hasPrimaryEvidence":true,"hasIndependentConfirmation":false,"hasMeasurableFirstOrderImpact":true,"discoveryWindowHours":24,"isBreaking":true,"mustInclude":true,"url":"https://openai.com/index/how-ai-is-expanding-what-people-do-at-work/","relatedSources":["OpenAI"],"relatedUrls":["https://openai.com/index/how-ai-is-expanding-what-people-do-at-work/"],"relatedCoverageCount":1},{"eventKey":"open-weights-american-ai-leadership-letter-2026-07-24","id":"evt-20260724-open-weights-letter","source":"Otto Analytics","handle":"OttoAnalytics","platform":"X","age":"3d","publishedAt":"2026-07-24T15:30:21.0000000Z","score":86,"title":"Coalition letter urges support for open-weight AI models","summary":"Microsoft-hosted letter signed by NVIDIA, Meta, OpenAI, Google, AMD, IBM, Hugging Face, Mistral and dozens of others argues open weights expand access, competition and safety while warning against premature restrictions.","implication":"Will coordinated industry push slow potential US restrictions on open-weight models and reshape competitive dynamics versus closed frontier labs?","sectors":["Policy","Models","Labs","Software"],"significance":34,"credibility":25,"timeliness":17,"depth":10,"postType":"announcement","eventType":"policy","entities":["Microsoft","NVIDIA","Meta","OpenAI","Google","AMD","IBM","Hugging Face"],"whyNow":"Broad industry coalition on open weights arrives amid active policy debates on AI access and export controls.","evidenceSummary":"Primary Microsoft corporate page publishes full letter text dated July 24 2026 listing extensive signatories including major labs and hyperscalers.","corroboratingUrls":["https://x.com/AMD/status/2081379093128343768","https://www.cnbc.com/2026/07/24/nvidia-microsoft-meta-open-weight-ai-models.html","https://www.tomshardware.com/tech-industry/artificial-intelligence/nvidia-and-24-other-companies-sign-open-weights-letter-as-washington-weighs-chinese-ai-model-ban"],"hasPrimaryEvidence":true,"hasIndependentConfirmation":true,"hasMeasurableFirstOrderImpact":true,"discoveryWindowHours":72,"isBreaking":false,"mustInclude":true,"url":"https://x.com/OttoAnalytics/status/2080676972267802752","relatedSources":["Microsoft","AMD","Otto Analytics"],"relatedUrls":["https://www.microsoft.com/en-us/corporate-responsibility/topics/open-weight/","https://x.com/AMD/status/2081379093128343768","https://x.com/OttoAnalytics/status/2080676972267802752"],"relatedCoverageCount":3,"primarySourceUrl":"https://www.microsoft.com/en-us/corporate-responsibility/topics/open-weight/","primarySourceName":"Microsoft","primarySourcePlatform":"Web","eventPublishedAt":"2026-07-24T12:00:00.0000000Z","featuredCommentary":true,"commentaryTitle":"Open weights as demand policy for physical AI stack","commentarySummary":"Signatories benefit from model-layer plurality that multiplies infrastructure spend; open weights turn sovereignty into capex on accelerators, memory, networking and power.","commentaryIncrementalValue":"Economic reading of who signs and why open weights expand the physical stack addressable market.","commentaryAnalysisType":"economic","commentaryScore":85},{"eventKey":"anthropic-claude-opus-5-release-2026-07-24","id":"evt-20260724-anthropic-opus5","source":"Epoch AI","handle":"EpochAIResearch","platform":"X","age":"3d","publishedAt":"2026-07-25T03:47:44.0000000Z","score":85,"title":"Anthropic releases Claude Opus 5","summary":"Claude Opus 5 is available today, delivering near-frontier intelligence of Claude Fable 5 at roughly half the price, with SOTA results on coding and knowledge-work benchmarks including Frontier-Bench.","implication":"Does the improved price-performance of mid-frontier models accelerate enterprise agent deployments and compress margins for higher-tier offerings?","sectors":["Labs","Models"],"significance":32,"credibility":25,"timeliness":16,"depth":12,"postType":"announcement","eventType":"model_release","entities":["Anthropic","Claude Opus 5","Claude Fable 5"],"whyNow":"New model availability immediately alters accessible capability and cost curves for developers and enterprises.","evidenceSummary":"Official Anthropic product announcement page details availability, pricing relative to Fable 5, and multiple benchmark comparisons with system card reference.","corroboratingUrls":["https://www.latent.space/p/ainews-claude-opus-5-fable-level"],"hasPrimaryEvidence":true,"hasIndependentConfirmation":true,"hasMeasurableFirstOrderImpact":true,"discoveryWindowHours":72,"isBreaking":false,"mustInclude":true,"url":"https://x.com/EpochAIResearch/status/2080862538712199206","relatedSources":["Anthropic","Latent Space","Epoch AI"],"relatedUrls":["https://www.anthropic.com/news/claude-opus-5","https://www.latent.space/p/ainews-claude-opus-5-fable-level","https://x.com/EpochAIResearch/status/2080862538712199206"],"relatedCoverageCount":3,"primarySourceUrl":"https://www.anthropic.com/news/claude-opus-5","primarySourceName":"Anthropic","primarySourcePlatform":"Web","eventPublishedAt":"2026-07-24T12:00:00.0000000Z","featuredCommentary":true,"commentaryTitle":"Opus 5 ECI and SWE-ECI vs Fable 5","commentarySummary":"Opus 5 reaches ECI 159 (Fable 5 at 161) while matching Fable exactly on the software-engineering ECI subset at 161.","commentaryIncrementalValue":"Adds Epoch\u0027s independent composite capability index scores focused on software engineering parity.","commentaryAnalysisType":"technical","commentaryScore":86},{"eventKey":"sakana-fugu-ultra-v1-1-2026-07-24","id":"evt-20260724-sakana-fugu","source":"Sakana AI","handle":"@SakanaAILabs","platform":"Web","age":"3d","publishedAt":"2026-07-24T12:00:00.0000000Z","score":68,"title":"Sakana AI releases Fugu-Ultra v1.1 with Claude Code interface","summary":"Fugu-Ultra v1.1 upgrades multi-agent orchestration of frontier models, claiming up to 7.9-point gains and beating Fable 5 on some coding tasks without including it; adds Claude Code-compatible endpoint.","implication":"Do orchestration layers that route across closed models create a durable alternative to single-lab frontier access?","sectors":["Labs","Models","Software"],"significance":22,"credibility":22,"timeliness":15,"depth":9,"postType":"announcement","eventType":"model_release","entities":["Sakana AI","Fugu-Ultra"],"whyNow":"Update demonstrates rapid iteration of multi-model coordination as a capability multiplier.","evidenceSummary":"Official Sakana AI release notes page with performance claims and new interface details.","corroboratingUrls":["https://sakana.ai/fugu/"],"hasPrimaryEvidence":true,"hasIndependentConfirmation":false,"hasMeasurableFirstOrderImpact":false,"discoveryWindowHours":72,"isBreaking":false,"mustInclude":true,"url":"https://sakana.ai/fugu-1-1-claude-code-interface/","relatedSources":["Sakana AI"],"relatedUrls":["https://sakana.ai/fugu-1-1-claude-code-interface/"],"relatedCoverageCount":1},{"eventKey":"nebius-pennsylvania-1.2gw-campus","id":"https://www.datacenterdynamics.com/en/news/nebius-details-plans-for-12gw-data-center-campus-in-pennsylvania/","source":"Data Center Dynamics","handle":"Newsletter","platform":"Substack","age":"3h","publishedAt":"2026-07-27T16:20:56.0000000Z","score":75,"title":"Nebius details plans for 1.2GW Pennsylvania data center campus","summary":"AI cloud firm Nebius outlined plans to build a 1.2GW data center campus in Schuylkill County’s Highridge Business Park in Pennsylvania.","implication":"Whether 1.2GW of committed Pennsylvania capacity meaningfully changes near-term AI cloud supply and regional power demand assumptions.","sectors":["Datacenters","Cloud","Energy","Hyperscalers"],"significance":32,"credibility":17,"timeliness":19,"depth":7,"postType":"announcement","eventType":"infrastructure","entities":["Nebius"],"whyNow":"Nebius has newly detailed a specific 1.2GW campus plan and Pennsylvania site today.","evidenceSummary":"Trade press report names capacity, county and business park, but the excerpt lacks permits, capex, tenants or timeline corroboration.","corroboratingUrls":[],"hasPrimaryEvidence":true,"hasIndependentConfirmation":false,"hasMeasurableFirstOrderImpact":true,"url":"https://www.datacenterdynamics.com/en/news/nebius-details-plans-for-12gw-data-center-campus-in-pennsylvania/","relatedSources":["Data Center Dynamics"],"relatedUrls":["https://www.datacenterdynamics.com/en/news/nebius-details-plans-for-12gw-data-center-campus-in-pennsylvania/"],"relatedCoverageCount":1},{"eventKey":"nvidia-rubin-nvl72-vs-gb200-inference-tco","id":"https://newsletter.semianalysis.com/p/vera-rubin-nvl72-vs-gb200-nvl72-inference","source":"SemiAnalysis","handle":"Newsletter","platform":"Substack","age":"4d","publishedAt":"2026-07-23T00:47:48.0000000Z","score":72,"title":"SemiAnalysis compares Rubin NVL72 and GB200 NVL72 inference TCO","summary":"SemiAnalysis analyzes Vera Rubin NVL72 versus GB200 NVL72 on inference total cost of ownership and architecture, citing 3-bit LUT tensor cores, rack-scale design, perf-per-MW/dollar and software stack factors including PyTorch, vLLM and Triton.","implication":"How much Rubin changes inference economics versus GB200 once software maturity and rack-level efficiency are included.","sectors":["Chips","Semis","Models","Hardware","Datacenters"],"significance":28,"credibility":18,"timeliness":13,"depth":13,"postType":"analysis","eventType":"research","entities":["NVIDIA (NVDA)"],"whyNow":"A detailed public TCO and architecture comparison of Rubin NVL72 versus GB200 NVL72 is newly available.","evidenceSummary":"Specialist architecture/TCO analysis lists concrete technical vectors, but the excerpt provides no primary datasheets or third-party benchmarks.","corroboratingUrls":[],"hasPrimaryEvidence":false,"hasIndependentConfirmation":false,"hasMeasurableFirstOrderImpact":true,"url":"https://newsletter.semianalysis.com/p/vera-rubin-nvl72-vs-gb200-nvl72-inference","relatedSources":["SemiAnalysis"],"relatedUrls":["https://newsletter.semianalysis.com/p/vera-rubin-nvl72-vs-gb200-nvl72-inference"],"relatedCoverageCount":1},{"eventKey":"amd-ai-2026-cuda-moat-mi455x","id":"https://newsletter.semianalysis.com/p/can-amd-break-the-cuda-moat-amd-advancing","source":"SemiAnalysis","handle":"Newsletter","platform":"Substack","age":"2d","publishedAt":"2026-07-25T00:33:23.0000000Z","score":71,"title":"SemiAnalysis assesses AMD AI 2026 push against CUDA moat","summary":"SemiAnalysis reviews AMD’s Advancing AI 2026 positioning, covering agentic kernel generation, software quality gains, internal cluster instability, Helios MI455X production ramp issues and aggressive financing discounts.","implication":"Whether AMD’s software and MI455X ramp progress is sufficient to erode NVIDIA’s CUDA-based competitive lock-in on training and inference share.","sectors":["Chips","Semis","Models","Software","Hardware"],"significance":26,"credibility":18,"timeliness":15,"depth":12,"postType":"analysis","eventType":"corporate","entities":["AMD (AMD)","NVIDIA (NVDA)"],"whyNow":"SemiAnalysis published a consolidated assessment of AMDâs 2026 software, cluster and MI455X ramp status versus the CUDA moat.","evidenceSummary":"High-specificity industry analysis cites production-ramp and discounting issues, but the excerpt is secondary and unconfirmed by primary filings.","corroboratingUrls":[],"hasPrimaryEvidence":false,"hasIndependentConfirmation":false,"hasMeasurableFirstOrderImpact":true,"url":"https://newsletter.semianalysis.com/p/can-amd-break-the-cuda-moat-amd-advancing","relatedSources":["SemiAnalysis"],"relatedUrls":["https://newsletter.semianalysis.com/p/can-amd-break-the-cuda-moat-amd-advancing"],"relatedCoverageCount":1},{"eventKey":"nvidia-aitc-snu-korea-2026","id":"2081142850994229468","source":"nvidia","handle":"nvidia","platform":"X","age":"1d","publishedAt":"2026-07-25T22:21:36Z","score":70,"title":"NVIDIA introduces AI Technology Center at Seoul National University","summary":"NVIDIA announced the NVIDIA AI Technology Center at Seoul National University, stating Korea is where the next wave of AI gets built, with SNU at the center, accompanied by images and a Jensen Huang quote.","implication":"What does a new multi-year NVIDIA AI tech center focused on research, talent and infrastructure in Korea imply for regional AI capacity, physical AI and hyperscaler ecosystem development?","sectors":["Labs","Datacenters","Chips","Hardware","Hyperscalers"],"significance":25,"credibility":22,"timeliness":15,"depth":8,"postType":"announcement","eventType":"corporate","entities":["NVIDIA","NVDA","Seoul National University"],"whyNow":"NVIDIA\u0027s official account posted the introduction of the SNU AI Technology Center on 2026-07-25.","evidenceSummary":"Primary @nvidia post with media announcing the center; independent confirmation from SNU announcements and secondary reports exists, though specific funding or capacity metrics are limited in the post.","corroboratingUrls":["https://en.snu.ac.kr/snunow/snu_media/news?md=v\u0026bbsidx=173288","https://www.gurufocus.com/news/8979537/nvidia-collaborates-with-seoul-national-university-to-establish-ai-technology-center","https://blogs.nvidia.com/blog/ai-summit-korea-partners-and-nvidia/"],"hasPrimaryEvidence":true,"hasIndependentConfirmation":true,"hasMeasurableFirstOrderImpact":false,"url":"https://x.com/nvidia/status/2081142850994229468","sourceTier":"event_gated","relatedSources":["nvidia"],"relatedUrls":["https://x.com/nvidia/status/2081142850994229468"],"relatedCoverageCount":1},{"eventKey":"amd-instinct-mi455x-architecture","id":"https://chipsandcheese.com/p/amds-instinct-mi455x-aiming-for-the","source":"Chips and Cheese","handle":"Newsletter","platform":"Substack","age":"4d","publishedAt":"2026-07-23T17:37:10.0000000Z","score":64,"title":"Chips and Cheese analyzes AMD Instinct MI455X architecture","summary":"Technical write-up on AMD’s Instinct MI455X, later edited with additional detail on L2 cache behavior and die-to-die interface bandwidth.","implication":"How MI455X microarchitectural choices affect competitive performance and system design versus NVIDIA accelerators.","sectors":["Chips","Semis","Hardware","Memory"],"significance":24,"credibility":15,"timeliness":13,"depth":12,"postType":"analysis","eventType":"research","entities":["AMD (AMD)"],"whyNow":"An updated technical analysis with added L2 and die-to-die bandwidth detail on MI455X is available.","evidenceSummary":"Architecture-focused article claims concrete cache and interconnect detail, but the excerpt does not show primary AMD documentation.","corroboratingUrls":[],"hasPrimaryEvidence":false,"hasIndependentConfirmation":false,"hasMeasurableFirstOrderImpact":true,"url":"https://chipsandcheese.com/p/amds-instinct-mi455x-aiming-for-the","relatedSources":["Chips and Cheese"],"relatedUrls":["https://chipsandcheese.com/p/amds-instinct-mi455x-aiming-for-the"],"relatedCoverageCount":1}];
+
+    const feedMeta = {"generatedAt":"2026-07-27T19:37:17.8151154Z","sourceUpdatedAt":"2026-07-27T19:35:04.9875989Z","oldestSourceAt":"2026-07-27T19:22:15.6680674Z","newestPublishedAt":"2026-07-27T16:20:56.0000000Z","staleAfterHours":36,"sourceFeeds":[{"name":"Breaking events","generatedAt":"2026-07-27T19:22:15.6680674Z","signalCount":4},{"name":"X","generatedAt":"2026-07-27T19:33:06.1413704Z","signalCount":2},{"name":"Newsletters / RSS","generatedAt":"2026-07-27T19:34:40.5215831Z","signalCount":5},{"name":"Event commentary","generatedAt":"2026-07-27T19:35:04.9875989Z","signalCount":2}]};
+
+    const sources = [
+      ["Broad event discovery", "X + official web", "Major AI-stack events before account-level ranking", "event"],
+      ["Artificial Analysis", "X · @ArtificialAnlys", "Model benchmarks, cost and performance", "core"],
+      ["Epoch AI", "X · @EpochAIResearch", "Compute trends, datasets and benchmarks", "core"],
+      ["SemiAnalysis", "X · @SemiAnalysis_", "Semis, memory, networking and datacenters", "core"],
+      ["Interconnects", "X · @interconnectsai", "Models, open weights and lab strategy", "core"],
+      ["Anthropic", "X · @AnthropicAI", "Models, safety, enterprise", "core"],
+      ["Simon Willison", "X · @simonw", "AI software, tools and model behavior", "core"],
+      ["Andrej Karpathy", "X · @karpathy", "Models, agents and software", "context"],
+      ["Jesse Jenkins", "X · @JesseJenkins", "Grid, generation and datacenter policy", "context"],
+      ["Peter Steinberger", "X · @steipete", "Coding agents and developer workflows", "context"],
+      ["Logan Kilpatrick", "X · @OfficialLoganK", "Gemini APIs and developer ecosystem", "context"],
+      ["Andrew Ng", "X · @AndrewYNg", "AI adoption, education and policy", "context"],
+      ["Demis Hassabis", "X · @demishassabis", "Frontier research and lab strategy", "context"],
+      ["Fei-Fei Li", "X · @drfeifei", "Spatial intelligence and computer vision", "context"],
+      ["Thomas Wolf", "X · @Thom_Wolf", "Open models and research ecosystems", "context"],
+      ["Erik Brynjolfsson", "X · @erikbryn", "Productivity, labor and economics", "context"],
+      ["Bojan Tunguz", "X · @tunguz", "Applied ML and technical commentary", "context"],
+      ["TechInsights", "X · @TechInsightsInc", "Chip teardowns and process analysis", "event"],
+      ["OpenAI", "X · @OpenAI", "Frontier-model and research disclosures", "event"],
+      ["Google DeepMind", "X · @GoogleDeepMind", "Research and model releases", "event"],
+      ["Meta AI", "X · @AIatMeta", "Open models and research", "event"],
+      ["NVIDIA", "X · @nvidia", "Accelerators, systems and networking", "event"],
+      ["AMD", "X · @AMD", "Accelerators, CPUs and deployments", "event"],
+      ["Micron", "X · @MicronTech", "HBM, DRAM, NAND and manufacturing", "event"],
+      ["Google AI", "X · @GoogleAI", "Gemini products and model availability", "event"],
+      ["xAI", "X · @xai", "Grok models and infrastructure releases", "event"],
+      ["Midjourney", "X · @midjourney", "Generative-media model releases", "event"],
+      ["MIT CSAIL", "X · @MIT_CSAIL", "Academic AI research", "event"],
+      ["IBM Data & AI", "X · @IBMData", "Enterprise AI and data platforms", "event"],
+      ["Sam Altman", "X · @sama", "OpenAI strategy and disclosures", "event"],
+      ["Greg Brockman", "X · @gdb", "OpenAI engineering and releases", "event"],
+      ["SemiAnalysis", "Newsletter / RSS", "Deep semiconductor research", "core"],
+      ["Interconnects", "Newsletter / RSS", "Model strategy analysis", "core"],
+      ["Import AI", "Newsletter / RSS", "Research and policy synthesis", "context"],
+      ["Fabricated Knowledge", "Newsletter / RSS", "Semiconductor companies and investing", "core"],
+      ["Asianometry", "Newsletter / RSS", "Asian semis and industrial history", "context"],
+      ["Latent Space", "Newsletter / RSS", "AI engineering, models and infrastructure", "core"],
+      ["Understanding AI", "Newsletter / RSS", "AI reporting, economics and policy", "context"],
+      ["ChinaTalk", "Newsletter / RSS", "China AI, semis and industrial policy", "context"],
+      ["AI Snake Oil", "Newsletter / RSS", "Evidence, evaluation and AI policy", "context"],
+      ["Clouded Judgement", "Newsletter / RSS", "Cloud, software economics and public-company metrics", "core"],
+      ["Data Center Dynamics", "Publication / RSS", "Datacenter construction, power, cooling and markets", "core"],
+      ["Utility Dive", "Publication / RSS", "Grid economics, regulation and large-load policy", "core"],
+      ["Chips and Cheese", "Publication / RSS", "Silicon architecture and measured hardware analysis", "core"],
+      ["Tech Policy Press", "Publication / RSS", "AI governance, regulation and technology policy", "context"]
+    ];
+
+    const state = {
+      signals: demoSignals,
+      mode: "Broad web + X + newsletters / RSS - sources refreshed Jul 27, 2026 3:35 PM",
+      query: "",
+      platform: "All",
+      sector: "All",
+      threshold: 60,
+      saved: new Set(readLocal("signalDeskSaved", [])),
+      useful: new Set(readLocal("signalDeskUseful", [])),
+      dismissed: new Set(readLocal("signalDeskDismissed", []))
+    };
+
+    function readLocal(key, fallback) {
+      try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+      catch (_) { return fallback; }
+    }
+    function saveLocal(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
+    }
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[ch]));
+    }
+    function safeUrl(value) {
+      try { const parsed = new URL(value); return parsed.protocol === "https:" ? parsed.href : "#"; }
+      catch (_) { return "#"; }
+    }
+    function isBreakingNow(item) {
+      if (!item.isBreaking || !item.publishedAt) return false;
+      const published = new Date(item.publishedAt);
+      if (Number.isNaN(published.getTime())) return false;
+      const ageHours = (Date.now() - published.getTime()) / 3600000;
+      return ageHours >= 0 && ageHours <= 24;
+    }
+    function inferEntities(item) {
+      if (Array.isArray(item.entities) && item.entities.length) return item.entities.map(String).slice(0, 8);
+      const text = [item.source, item.title, item.summary].join(" ");
+      const rules = [
+        [/\bNVIDIA\b/i, "NVDA"], [/\bAMD\b|Advanced Micro Devices/i, "AMD"], [/\bIntel\b/i, "INTC"],
+        [/\bMeta\b/i, "META"], [/\bGoogle\b|DeepMind/i, "GOOGL"], [/\bMicrosoft\b/i, "MSFT"],
+        [/\bAmazon\b|\bAWS\b/i, "AMZN"], [/\bTSMC\b|Taiwan Semiconductor/i, "TSM"], [/\bBroadcom\b/i, "AVGO"],
+        [/\bMicron\b/i, "MU"], [/\bOracle\b/i, "ORCL"], [/\bCoreWeave\b/i, "CRWV"],
+        [/\bAnthropic\b/i, "Anthropic · private"], [/\bOpenAI\b/i, "OpenAI · private"],
+        [/\bHuawei\b|HiSilicon/i, "Huawei / HiSilicon"], [/\bKimi\b|Moonshot AI/i, "Moonshot AI · private"]
+      ];
+      return rules.filter(([pattern]) => pattern.test(text)).map(([, label]) => label).slice(0, 8);
+    }
+    function eventLabel(item) {
+      const raw = String(item.eventType || item.postType || "other").replaceAll("_", " ");
+      return raw.replace(/\b\w/g, letter => letter.toUpperCase());
+    }
+    function evidenceLabel(item) {
+      if (item.hasIndependentConfirmation) return "Independently corroborated";
+      if (item.hasPrimaryEvidence) return "Primary evidence · single source";
+      return "Secondary evidence · single source";
+    }
+    function evidenceClass(item) { return item.hasIndependentConfirmation ? "evidence-good" : "evidence-caution"; }
+    function publishedLabel(item) {
+      if (!item.publishedAt) return item.age || "Time unavailable";
+      const date = new Date(item.publishedAt);
+      if (Number.isNaN(date.getTime())) return item.age || "Time unavailable";
+      return date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    }
+    function ageLabel(item) {
+      if (!item.publishedAt) return item.age || "Time unavailable";
+      const published = new Date(item.publishedAt);
+      if (Number.isNaN(published.getTime())) return item.age || "Time unavailable";
+      const minutes = Math.max(0, Math.floor((Date.now() - published.getTime()) / 60000));
+      if (minutes < 60) return `${Math.max(1, minutes)}m`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}h`;
+      const days = Math.floor(hours / 24);
+      if (days < 14) return `${days}d`;
+      return `${Math.floor(days / 7)}w`;
+    }
+    function platformLabel(value) {
+      if (value === "Substack") return "Newsletters / RSS";
+      if (value === "Web") return "Official / Web";
+      return value;
+    }
+    function sourceFreshness() {
+      const stamp = feedMeta.sourceUpdatedAt || feedMeta.generatedAt;
+      if (!stamp) return { stale: false, label: "Illustrative", title: "Illustrative data" };
+      const updated = new Date(stamp);
+      if (Number.isNaN(updated.getTime())) return { stale: true, label: "Refresh unknown", title: "Source refresh time unavailable" };
+      const ageHours = Math.max(0, (Date.now() - updated.getTime()) / 3600000);
+      const staleAfter = Math.max(1, Number(feedMeta.staleAfterHours || 36));
+      return {
+        stale: ageHours > staleAfter,
+        label: ageHours > staleAfter ? `Stale · ${Math.floor(ageHours / 24)}d` : ageHours < 1 ? "Fresh · <1h" : `Fresh · ${Math.floor(ageHours)}h`,
+        title: `Newest source refresh: ${updated.toLocaleString()}`
+      };
+    }
+    function listSectors() {
+      return [...new Set(state.signals.flatMap(item => item.sectors || []))].sort();
+    }
+    function countFor(kind, value) {
+      if (value === "All") return state.signals.length;
+      return kind === "platform"
+        ? state.signals.filter(item => item.platform === value).length
+        : state.signals.filter(item => (item.sectors || []).includes(value)).length;
+    }
+    function matchingSignals() {
+      const needle = state.query.trim().toLowerCase();
+      return state.signals
+        .filter(item => !state.dismissed.has(String(item.id)))
+        .filter(item => state.platform === "All" || item.platform === state.platform)
+        .filter(item => state.sector === "All" || (item.sectors || []).includes(state.sector))
+        .filter(item => !needle || [item.source, item.handle, item.title, item.summary, item.implication, item.commentaryTitle, item.commentaryIncrementalValue, eventLabel(item), ...inferEntities(item), ...(item.sectors || [])].join(" ").toLowerCase().includes(needle));
+    }
+    function filteredSignals() {
+      return matchingSignals()
+        .filter(item => item.mustInclude || Number(item.score) >= state.threshold);
+    }
+    function renderFilters() {
+      const platformOrder = ["X", "Substack", "Web"];
+      const availablePlatforms = new Set(state.signals.map(item => item.platform));
+      const platformValues = ["All", ...platformOrder.filter(value => availablePlatforms.has(value))];
+      document.getElementById("platformFilters").innerHTML = platformValues.map(value => `
+        <button class="filter-button ${state.platform === value ? "active" : ""}" data-filter-kind="platform" data-filter-value="${esc(value)}">
+          <span>${esc(value === "All" ? "All platforms" : platformLabel(value))}</span><span class="filter-count">${countFor("platform", value)}</span>
+        </button>`).join("");
+      const sectors = ["All", ...listSectors()];
+      document.getElementById("sectorFilters").innerHTML = sectors.map(value => `
+        <button class="filter-button ${state.sector === value ? "active" : ""}" data-filter-kind="sector" data-filter-value="${esc(value)}">
+          <span>${esc(value === "All" ? "All sectors" : value)}</span><span class="filter-count">${countFor("sector", value)}</span>
+        </button>`).join("");
+    }
+    function breakdown(item) {
+      const rows = [
+        ["Significance", item.significance, 40],
+        ["Credibility", item.credibility, 25],
+        ["Timeliness", item.timeliness, 20],
+        ["Depth", item.depth, 15]
+      ];
+      return rows.map(([label, value, max]) => `
+        <div class="break-row"><span>${label}</span><div class="bar"><span style="width:${Math.min(100, Math.max(0, Number(value) / max * 100))}%"></span></div><b>${esc(value)}</b></div>
+      `).join("");
+    }
+    function renderSignals() {
+      const items = filteredSignals();
+      const matching = matchingSignals();
+      const hiddenByQuality = matching.filter(item => !item.mustInclude && Number(item.score) < state.threshold).length;
+      const list = document.getElementById("signalList");
+      if (!items.length) {
+        list.innerHTML = `<div class="empty"><strong>No signals clear the current filters.</strong><br>Lower the quality threshold or reset the filters.</div>`;
+      } else {
+        list.innerHTML = items.map(item => {
+          const id = String(item.id);
+          const entities = inferEntities(item);
+          const linkedCoverage = Math.max(1, Number(item.relatedCoverageCount || 1));
+          const corroboratingUrls = Array.isArray(item.corroboratingUrls) ? item.corroboratingUrls.map(safeUrl).filter(url => url !== "#").slice(0, 3) : [];
+          const featuredCommentary = Boolean(item.featuredCommentary);
+          const primarySourceUrl = safeUrl(item.primarySourceUrl);
+          const sectors = Array.isArray(item.sectors) ? item.sectors : [];
+          const visibleSectors = sectors.slice(0, 2);
+          const hiddenSectorCount = Math.max(0, sectors.length - visibleSectors.length);
+          const breaking = isBreakingNow(item);
+          const tierClass = item.mustInclude ? (breaking ? "breaking" : "major") : Number(item.score) >= 80 ? "priority" : Number(item.score) >= 70 ? "brief" : "watchlist";
+          const tierLabel = item.mustInclude ? (breaking ? "Breaking" : "Major event") : Number(item.score) >= 80 ? "Priority" : Number(item.score) >= 70 ? "Morning brief" : "Watchlist";
+          return `<article class="signal-card">
+            <div class="score ${Number(item.score) < 80 ? "secondary" : ""}" title="Quality score out of 100">${esc(item.score)}</div>
+            <div class="signal-main">
+              <div class="source-line"><span class="source-name">${esc(item.source)}</span><span>&middot;</span><span title="${esc(publishedLabel(item))}">${esc(ageLabel(item))}</span><span class="platform-tag">${esc(platformLabel(item.platform))}</span><span class="quality-tier ${tierClass}">${tierLabel}</span>${item.demo ? '<span class="demo-tag">Hypothetical</span>' : ''}</div>
+              <h3>${esc(item.title)}</h3>
+              <p class="implication"><b>Brief implication:</b> ${esc(item.implication)}</p>
+              <div class="tags">${visibleSectors.map(tag => `<span class="tag">${esc(tag)}</span>`).join("")}${hiddenSectorCount ? `<span class="tag">+${hiddenSectorCount}</span>` : ""}</div>
+              <details class="signal-details">
+                <summary>Evidence &amp; score details</summary>
+                <p class="detail-summary"><span class="detail-label">Source summary</span>${esc(item.summary)}</p>
+                <div class="detail-grid" aria-label="Signal context">
+                  <div class="detail-item"><span class="detail-label">Event type</span><span class="detail-value">${esc(eventLabel(item))}</span></div>
+                  <div class="detail-item"><span class="detail-label">Explicit names</span><div class="entity-list">${entities.length ? entities.map(entity => `<span class="entity-chip">${esc(entity)}</span>`).join("") : '<span class="detail-value">No issuer explicitly named</span>'}</div></div>
+                  <div class="detail-item"><span class="detail-label">Evidence status</span><span class="detail-value ${evidenceClass(item)}">${esc(evidenceLabel(item))}${linkedCoverage > 1 ? ` &middot; ${linkedCoverage} linked reports` : ""}</span></div>
+                </div>
+                ${item.whyNow ? `<p class="evidence-note"><b>Why now:</b> ${esc(item.whyNow)}</p>` : ""}
+                ${item.evidenceSummary ? `<p class="evidence-note"><b>Evidence note:</b> ${esc(item.evidenceSummary)}</p>` : ""}
+                ${featuredCommentary && item.commentaryIncrementalValue ? `<p class="evidence-note"><b>Why this commentary:</b> ${esc(item.commentaryIncrementalValue)}</p>` : ""}
+                ${featuredCommentary && primarySourceUrl !== "#" ? `<p class="evidence-note"><b>Primary source:</b><span class="evidence-links"><a href="${primarySourceUrl}" target="_blank" rel="noreferrer">${esc(item.primarySourceName || "Official source")}&nearr;</a></span></p>` : ""}
+                ${corroboratingUrls.length ? `<p class="evidence-note"><b>Independent sources:</b><span class="evidence-links">${corroboratingUrls.map((url, index) => `<a href="${url}" target="_blank" rel="noreferrer">${index + 1}&nearr;</a>`).join("")}</span></p>` : ""}
+                <div class="details-breakdown"><span class="detail-label">Score components</span><div class="breakdown">${breakdown(item)}</div></div>
+              </details>
+              <div class="card-footer">
+                <a class="article-link" href="${safeUrl(item.url)}" target="_blank" rel="noreferrer">${featuredCommentary ? "Open commentary" : "Open primary source"} <span aria-hidden="true">&nearr;</span></a>
+                <div class="card-actions">
+                  <button class="mini-action ${state.saved.has(id) ? "active" : ""}" data-action="save" data-id="${esc(id)}">${state.saved.has(id) ? "Saved" : "Save"}</button>
+                  <button class="mini-action ${state.useful.has(id) ? "active" : ""}" data-action="useful" data-id="${esc(id)}">${state.useful.has(id) ? "Useful &#10003;" : "Useful"}</button>
+                  <button class="mini-action dismiss" data-action="dismiss" data-id="${esc(id)}">Dismiss</button>
+                </div>
+              </div>
+            </div>
+          </article>`;
+        }).join("");
+      }
+      document.getElementById("signalCount").textContent = `${items.length} shown`;
+      document.getElementById("feedMode").textContent = state.mode;
+      const freshness = sourceFreshness();
+      const freshnessBadge = document.getElementById("freshnessBadge");
+      freshnessBadge.textContent = freshness.label;
+      freshnessBadge.title = freshness.title;
+      freshnessBadge.classList.toggle("stale", freshness.stale);
+      document.getElementById("visibilityNote").textContent = hiddenByQuality
+        ? `${hiddenByQuality} additional ${hiddenByQuality === 1 ? "signal" : "signals"} below the ${state.threshold}-point display threshold`
+        : "All matching signals are shown";
+    }
+    function renderSources() {
+      const tierLabels = { core: "Core", context: "Context", event: "Major events" };
+      document.getElementById("sourceRows").innerHTML = sources.map(([name, platform, coverage, tier]) => `
+        <tr><td class="source-title">${esc(name)}</td><td>${esc(platform)}</td><td class="coverage">${esc(coverage)}</td><td><span class="tier ${tier}">${esc(tierLabels[tier] || "Context")}</span></td></tr>`).join("");
+    }
+    function render() { renderFilters(); renderSignals(); }
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove("show"), 2600);
+    }
+    function toggleSet(set, id, storageKey) {
+      set.has(id) ? set.delete(id) : set.add(id);
+      saveLocal(storageKey, [...set]);
+    }
+    document.addEventListener("click", event => {
+      const viewButton = event.target.closest("[data-view]");
+      if (viewButton) {
+        document.querySelectorAll("[data-view]").forEach(button => button.classList.toggle("active", button === viewButton));
+        document.querySelectorAll(".view").forEach(view => view.classList.remove("active"));
+        document.getElementById(`${viewButton.dataset.view}View`).classList.add("active");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      const filterButton = event.target.closest("[data-filter-kind]");
+      if (filterButton) {
+        state[filterButton.dataset.filterKind] = filterButton.dataset.filterValue;
+        render();
+        return;
+      }
+      const action = event.target.closest("[data-action]");
+      if (action) {
+        const id = String(action.dataset.id);
+        if (action.dataset.action === "save") { toggleSet(state.saved, id, "signalDeskSaved"); showToast(state.saved.has(id) ? "Saved to this device" : "Removed from saved"); }
+        if (action.dataset.action === "useful") { toggleSet(state.useful, id, "signalDeskUseful"); showToast(state.useful.has(id) ? "Marked useful" : "Useful mark removed"); }
+        if (action.dataset.action === "dismiss") { state.dismissed.add(id); saveLocal("signalDeskDismissed", [...state.dismissed]); showToast("Signal dismissed. Reset filters to restore dismissed items."); }
+        render();
+      }
+    });
+
+    document.getElementById("searchInput").addEventListener("input", event => { state.query = event.target.value; renderSignals(); });
+    document.getElementById("thresholdInput").addEventListener("input", event => {
+      state.threshold = Number(event.target.value);
+      document.getElementById("thresholdValue").textContent = state.threshold;
+      renderSignals();
+    });
+    document.getElementById("resetButton").addEventListener("click", () => {
+      state.query = ""; state.platform = "All"; state.sector = "All"; state.threshold = 60; state.dismissed.clear();
+      saveLocal("signalDeskDismissed", []);
+      document.getElementById("searchInput").value = "";
+      document.getElementById("thresholdInput").value = "60";
+      document.getElementById("thresholdValue").textContent = "60";
+      render(); showToast("Filters and dismissed items reset");
+    });
+    document.getElementById("mobileFilters").addEventListener("click", () => document.getElementById("sidebar").classList.toggle("open"));
+    document.getElementById("clearFeedbackButton").addEventListener("click", () => {
+      state.saved.clear(); state.useful.clear(); state.dismissed.clear();
+      ["signalDeskSaved", "signalDeskUseful", "signalDeskDismissed"].forEach(key => localStorage.removeItem(key));
+      render(); showToast("Local feedback cleared");
+    });
+
+    renderSources();
+    render();
+    setInterval(renderSignals, 60000);
+  </script>
+</body>
+</html>
