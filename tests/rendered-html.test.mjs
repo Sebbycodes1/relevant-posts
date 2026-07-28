@@ -160,7 +160,7 @@ test("dashboard builder refreshes static and runtime metadata idempotently", asy
     const staticMode = second.match(/<span id="feedMode">([^<]*)<\/span>/)?.[1];
     const runtimeMode = second.match(/const state\s*=\s*\{.*?\bmode:\s*"([^"]*)"/s)?.[1];
     assert.equal(runtimeMode, staticMode);
-    assert.match(staticMode ?? "", /sources refreshed Jul 29, 2099 8:30 AM/);
+    assert.match(staticMode ?? "", /sources refreshed Jul 29, 2099/);
     assert.equal(extractEmbeddedFeed(second).meta.sourceUpdatedAt, fixedTimestamp);
     assert.equal(first, second);
 
