@@ -140,10 +140,10 @@ $allSignals = @($allSignals | Where-Object { -not ($_.eventType -eq "other" -and
 if ($allSignals.Count -eq 0) { throw "No live signals cleared the event classification policy." }
 
 $rankedSignals = @($allSignals | Sort-Object `
-    @{ Expression = { if ([bool]$_.mustInclude) { 1 } else { 0 } }; Descending = $true }, `
-    @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
     @{ Expression = { [int]$_.score }; Descending = $true }, `
-    @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true })
+    @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
+    @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true }, `
+    @{ Expression = { if ([bool]$_.mustInclude) { 1 } else { 0 } }; Descending = $true })
 
 $merged = @()
 foreach ($item in $rankedSignals) {
@@ -190,10 +190,10 @@ foreach ($item in $rankedSignals) {
             Where-Object { $_ -and ([string]$_).Trim().ToLowerInvariant() -ne ([string]$duplicate.url).Trim().ToLowerInvariant() } |
             Select-Object -Unique |
             Select-Object -First 4)
-        $duplicate.corroboratingUrls = $additionalCorroboration
-        $duplicate.hasIndependentConfirmation = [bool]$duplicate.hasIndependentConfirmation -or [bool]$item.hasIndependentConfirmation -or $duplicate.relatedSources.Count -gt 1
-        $duplicate.isBreaking = [bool]$duplicate.isBreaking -or [bool]$item.isBreaking
-        $duplicate.mustInclude = [bool]$duplicate.mustInclude -or [bool]$item.mustInclude
+        Set-ObjectProperty $duplicate "corroboratingUrls" $additionalCorroboration
+        Set-ObjectProperty $duplicate "hasIndependentConfirmation" ([bool]$duplicate.hasIndependentConfirmation -or [bool]$item.hasIndependentConfirmation -or $duplicate.relatedSources.Count -gt 1)
+        Set-ObjectProperty $duplicate "isBreaking" ([bool]$duplicate.isBreaking -or [bool]$item.isBreaking)
+        Set-ObjectProperty $duplicate "mustInclude" ([bool]$duplicate.mustInclude -or [bool]$item.mustInclude)
         continue
     }
 

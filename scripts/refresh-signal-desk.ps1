@@ -48,7 +48,7 @@ catch {
 }
 
 try {
-    & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -LookbackDays 7 -CandidatesPerEvent 4
+    & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -LookbackDays 7 -CandidatesPerEvent 10 -MinimumCandidatesPerEvent 5 -MaxDiscoveryPasses 2
     if (-not $?) { throw "Commentary enrichment did not complete." }
 }
 catch {

@@ -1,13 +1,19 @@
 [CmdletBinding()]
 param(
-    [ValidateRange(55, 90)]
+    [ValidateRange(55, 85)]
     [int]$MinimumCommentaryScore = 70,
 
     [ValidateRange(1, 14)]
     [int]$LookbackDays = 7,
 
-    [ValidateRange(1, 6)]
-    [int]$CandidatesPerEvent = 4,
+    [ValidateRange(5, 15)]
+    [int]$CandidatesPerEvent = 10,
+
+    [ValidateRange(3, 10)]
+    [int]$MinimumCandidatesPerEvent = 5,
+
+    [ValidateRange(1, 2)]
+    [int]$MaxDiscoveryPasses = 2,
 
     [string]$Model = "grok-4.5",
 
@@ -20,33 +26,35 @@ $ProgressPreference = "SilentlyContinue"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $eventFeedPath = Join-Path $projectRoot "outputs\live-breaking-feed.json"
 $xFeedPath = Join-Path $projectRoot "outputs\live-x-feed.json"
-$rssCandidatesPath = Join-Path $projectRoot "work\substack-candidates.json"
 $outputPath = Join-Path $projectRoot "outputs\live-commentary-feed.json"
 $diagnosticDirectory = Join-Path $projectRoot "work"
 $candidateAuditPath = Join-Path $diagnosticDirectory "commentary-candidates.json"
+$gradingAuditPath = Join-Path $diagnosticDirectory "commentary-grades.json"
 $rejectionAuditPath = Join-Path $diagnosticDirectory "commentary-rejections.json"
+$coverageAuditPath = Join-Path $diagnosticDirectory "x-commentary-coverage.json"
+$sourcePerformancePath = Join-Path $diagnosticDirectory "x-source-performance.json"
 . (Join-Path $PSScriptRoot "xai-key.ps1")
 
 New-Item -ItemType Directory -Path $diagnosticDirectory -Force | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding($false)
+$nowUtc = (Get-Date).ToUniversalTime()
 
 if (-not (Test-Path -LiteralPath $eventFeedPath)) {
     throw "No verified event feed is available for commentary enrichment."
 }
 
 $eventFeed = [IO.File]::ReadAllText($eventFeedPath) | ConvertFrom-Json
-$nowUtc = (Get-Date).ToUniversalTime()
 $events = @($eventFeed.signals | Where-Object {
     try {
         ($nowUtc - ([datetime]$_.publishedAt).ToUniversalTime()).TotalDays -le $LookbackDays
     }
     catch { $false }
-} | Select-Object eventKey, title, summary, entities, eventType, publishedAt, url)
+} | Select-Object eventKey, title, summary, entities, eventType, publishedAt, url, source, evidenceSummary)
 
 if ($events.Count -eq 0) {
     $emptyFeed = [ordered]@{
         generatedAt = $nowUtc.ToString("o")
-        source = "Targeted X and newsletter commentary"
+        source = "High-recall X commentary"
         eventsExamined = 0
         minimumCommentaryScore = $MinimumCommentaryScore
         commentaries = @()
@@ -54,184 +62,6 @@ if ($events.Count -eq 0) {
     [IO.File]::WriteAllText($outputPath, ($emptyFeed | ConvertTo-Json -Depth 10), $utf8)
     & (Join-Path $PSScriptRoot "merge-live-feeds.ps1") | Out-Host
     return
-}
-
-$rssCandidates = @()
-if (Test-Path -LiteralPath $rssCandidatesPath) {
-    $rssCandidates = @([IO.File]::ReadAllText($rssCandidatesPath) | ConvertFrom-Json |
-        Select-Object id, source, title, publishedAt, url, excerpt)
-}
-
-$preferredHandles = @()
-if (Test-Path -LiteralPath $xFeedPath) {
-    try {
-        $xFeed = [IO.File]::ReadAllText($xFeedPath) | ConvertFrom-Json
-        $preferredHandles = @($xFeed.handles | ForEach-Object { ([string]$_).Trim().TrimStart('@') } | Where-Object { $_ } | Select-Object -Unique)
-    } catch {}
-}
-
-$earliestEvent = @($events | ForEach-Object {
-    try { ([datetime]$_.publishedAt).ToUniversalTime() } catch {}
-} | Where-Object { $_ } | Sort-Object | Select-Object -First 1)
-$fromDate = if ($earliestEvent.Count) { $earliestEvent[0].ToString("yyyy-MM-dd") } else { $nowUtc.AddDays(-$LookbackDays).ToString("yyyy-MM-dd") }
-$toDate = $nowUtc.ToString("yyyy-MM-dd")
-$candidateLimit = [Math]::Min(30, $events.Count * $CandidatesPerEvent)
-$eventsJson = $events | ConvertTo-Json -Depth 8 -Compress
-$rssJson = $rssCandidates | ConvertTo-Json -Depth 6 -Compress
-
-$prompt = @"
-You are the commentary editor for an institutional asset-management AI intelligence feed.
-
-Current time: $($nowUtc.ToString("o"))
-
-The supplied events have already been verified against primary sources. Your job is to find the best X post or supplied newsletter/RSS article that adds meaningful interpretation to each event. Do not rediscover or rescore the event itself.
-
-For every supplied event:
-1. Search unrestricted X from the event date through today using the exact model/product name, entities, distinctive terms and primary URL.
-2. Check the supplied RSS candidates for a clearly matching article.
-3. Prefer the configured watchlist when quality is equal, but allow an unfamiliar author whose post is specific, evidence-led and genuinely useful.
-4. Return at least three plausible candidates per event when available, including rejected borderline candidates for audit. It is acceptable to return no qualifying commentary for an event.
-
-Timing is a hard rule. Commentary must be published at or after the supplied event publishedAt and must clearly respond to the completed release, publication or announcement. Exclude predictions, previews, leaks, anticipatory threads and posts that merely happen to discuss the same product before it was released. Even a correct prediction is not post-event commentary. When the event timestamp is date-only, use the post's language to determine whether it discusses the completed event rather than an anticipated one.
-
-Preferred X watchlist:
-$($preferredHandles -join ', ')
-
-Commentary must add at least one of:
-- new facts or measurements beyond the announcement;
-- technical mechanism or benchmark interpretation;
-- economic, competitive, policy, capacity or supply-chain analysis;
-- a well-supported skeptical challenge to the primary claim;
-- synthesis connecting the event to another independently sourced development.
-
-Return English-language commentary only. Exclude announcement repetition, quote-posts without added analysis, generic praise, alarmism, unsupported predictions, engagement bait, personality commentary and generated-looking roundups. Reject sensational headlines, hidden-motive accusations and claims that a person or company is trying to ban or destroy something unless direct evidence supports the claim and the framing remains professional and neutral. Popularity and author fame are not quality signals. A post from the announcing company is not independent commentary unless it contains substantial new technical or economic analysis beyond the release.
-
-Score COMMENTARY VALUE, not event significance:
-- Incremental analytical insight, 0-35.
-- Evidence and specificity, 0-25.
-- Direct relevance to the event, 0-25.
-- Independence from the primary announcement, 0-15.
-
-The total must equal the components. Scores above 85 should be rare and no commentary should score above 89. Set decision to include only at $MinimumCommentaryScore or above, with at least 22 insight points, direct relevance, professional neutral tone and genuine independence. For an unfamiliar account, require both meaningful quantification and a direct evidence link in the post. Never invent a post, author, date, URL, claim or quotation.
-
-For X, return a direct https://x.com/.../status/... URL found by X Search. For newsletters/RSS, return only an exact URL from the supplied candidates. Copy eventKey exactly from the supplied event. Keep the commentary summary factual and under 45 words.
-
-Verified events:
-$eventsJson
-
-Untrusted newsletter/RSS candidates:
-$rssJson
-"@
-
-$candidateProperties = [ordered]@{
-    eventKey = @{ type = "string" }
-    source = @{ type = "string" }
-    handle = @{ type = "string" }
-    platform = @{ type = "string"; enum = @("X", "Substack") }
-    publishedAt = @{ type = "string" }
-    url = @{ type = "string" }
-    title = @{ type = "string" }
-    summary = @{ type = "string" }
-    incrementalValue = @{ type = "string" }
-    analysisType = @{ type = "string"; enum = @("technical", "economic", "policy", "market", "skeptical", "synthesis", "repetition") }
-    insight = @{ type = "integer"; minimum = 0; maximum = 35 }
-    evidence = @{ type = "integer"; minimum = 0; maximum = 25 }
-    relevance = @{ type = "integer"; minimum = 0; maximum = 25 }
-    independence = @{ type = "integer"; minimum = 0; maximum = 15 }
-    score = @{ type = "integer"; minimum = 0; maximum = 100 }
-    addsNewFacts = @{ type = "boolean" }
-    hasQuantification = @{ type = "boolean" }
-    isIndependent = @{ type = "boolean" }
-    hasDirectEvidenceLinks = @{ type = "boolean" }
-    language = @{ type = "string"; enum = @("English", "Other") }
-    tone = @{ type = "string"; enum = @("neutral", "advocacy", "alarmist", "unclear") }
-    sourceFamiliarity = @{ type = "string"; enum = @("preferred", "established_new", "unknown") }
-    temporalRelation = @{ type = "string"; enum = @("before_event", "after_event", "unclear") }
-    respondsToCompletedEvent = @{ type = "boolean" }
-    decision = @{ type = "string"; enum = @("include", "exclude") }
-    rejectionReason = @{ type = "string" }
-}
-
-$schema = [ordered]@{
-    type = "object"
-    properties = [ordered]@{
-        generatedAt = @{ type = "string" }
-        candidates = @{
-            type = "array"
-            maxItems = $candidateLimit
-            items = [ordered]@{
-                type = "object"
-                properties = $candidateProperties
-                required = @($candidateProperties.Keys)
-                additionalProperties = $false
-            }
-        }
-    }
-    required = @("generatedAt", "candidates")
-    additionalProperties = $false
-}
-
-$requestBody = [ordered]@{
-    model = $Model
-    input = $prompt
-    tools = @(
-        [ordered]@{
-            type = "x_search"
-            from_date = $fromDate
-            to_date = $toDate
-        }
-    )
-    text = [ordered]@{
-        format = [ordered]@{
-            type = "json_schema"
-            name = "relevant_posts_event_commentary"
-            schema = $schema
-            strict = $true
-        }
-    }
-    max_output_tokens = 14000
-    store = $false
-}
-
-if ($ReplayCandidates) {
-    if (-not (Test-Path -LiteralPath $candidateAuditPath)) {
-        throw "No saved commentary candidates are available to replay."
-    }
-    $result = [IO.File]::ReadAllText($candidateAuditPath) | ConvertFrom-Json
-    Write-Host "Replaying saved commentary candidates through the local quality policy..." -ForegroundColor Cyan
-}
-else {
-    $apiKey = Get-XaiApiKey -ProjectRoot $projectRoot
-    try {
-        Write-Host "Finding high-value commentary for verified events..." -ForegroundColor Cyan
-        $response = Invoke-RestMethod `
-            -Method Post `
-            -Uri "https://api.x.ai/v1/responses" `
-            -Headers @{ Authorization = "Bearer $apiKey" } `
-            -ContentType "application/json" `
-            -Body ($requestBody | ConvertTo-Json -Depth 30 -Compress) `
-            -TimeoutSec 420
-    }
-    catch {
-        $status = $_.Exception.Response.StatusCode.value__ 2>$null
-        $detail = $_.ErrorDetails.Message
-        if ($status -and $detail) { throw "xAI returned HTTP $status. $detail" }
-        throw "Commentary enrichment failed. $($_.Exception.Message)"
-    }
-    finally {
-        Remove-Variable apiKey -ErrorAction SilentlyContinue
-    }
-
-    $message = @($response.output | Where-Object { $_.type -eq "message" }) | Select-Object -Last 1
-    $textBlock = @($message.content | Where-Object { $_.type -eq "output_text" }) | Select-Object -First 1
-    if (-not $textBlock.text) { throw "xAI returned no structured commentary results." }
-    try {
-        $result = $textBlock.text | ConvertFrom-Json
-    }
-    catch {
-        throw "xAI returned invalid commentary JSON. No output file was changed."
-    }
-    [IO.File]::WriteAllText($candidateAuditPath, ($result | ConvertTo-Json -Depth 20), $utf8)
 }
 
 function Get-CanonicalUrl {
@@ -243,126 +73,457 @@ function Get-CanonicalUrl {
         return $builder.Uri.AbsoluteUri.TrimEnd('/').ToLowerInvariant()
     }
     catch {
-        return $Url.Trim().TrimEnd('/').ToLowerInvariant()
+        return ([string]$Url).Trim().TrimEnd('/').ToLowerInvariant()
     }
 }
 
+function Get-ResponseJson {
+    param($Response, [string]$Context)
+    $message = @($Response.output | Where-Object { $_.type -eq "message" }) | Select-Object -Last 1
+    $textBlock = @($message.content | Where-Object { $_.type -eq "output_text" }) | Select-Object -First 1
+    if (-not $textBlock.text) { throw "xAI returned no structured results for $Context." }
+    try {
+        return $textBlock.text | ConvertFrom-Json
+    }
+    catch {
+        throw "xAI returned invalid structured JSON for $Context."
+    }
+}
+
+function Invoke-XaiStructuredRequest {
+    param(
+        [string]$ApiKey,
+        $RequestBody,
+        [string]$Context
+    )
+    try {
+        $safeInput = [string]$RequestBody.input
+        $safeInput = [regex]::Replace($safeInput, '(?i)\\ud[89ab][0-9a-f]{2}\\ud[c-f][0-9a-f]{2}', '')
+        $safeInput = [regex]::Replace($safeInput, '(?i)\\ud[89ab][0-9a-f]{2}|\\ud[c-f][0-9a-f]{2}', '')
+        $safeInput = [regex]::Replace($safeInput, '[^\u0009\u000a\u000d\u0020-\u007e]', ' ')
+        $RequestBody.input = $safeInput
+        $bodyJson = $RequestBody | ConvertTo-Json -Depth 35 -Compress
+        $bodyJson = [Text.Encoding]::UTF8.GetString([Text.Encoding]::UTF8.GetBytes($bodyJson))
+        $response = Invoke-RestMethod `
+            -Method Post `
+            -Uri "https://api.x.ai/v1/responses" `
+            -Headers @{ Authorization = "Bearer $ApiKey" } `
+            -ContentType "application/json" `
+            -Body $bodyJson `
+            -TimeoutSec 420
+        return Get-ResponseJson $response $Context
+    }
+    catch {
+        $status = $_.Exception.Response.StatusCode.value__ 2>$null
+        $detail = $_.ErrorDetails.Message
+        if ($status -and $detail) { throw "xAI returned HTTP $status while processing $Context. $detail" }
+        throw "xAI request failed while processing $Context. $($_.Exception.Message)"
+    }
+}
+
+$preferredHandles = @()
+if (Test-Path -LiteralPath $xFeedPath) {
+    try {
+        $xFeed = [IO.File]::ReadAllText($xFeedPath) | ConvertFrom-Json
+        $preferredHandles += @($xFeed.handles)
+    } catch {}
+}
+
+$sourcePerformance = @()
+if (Test-Path -LiteralPath $sourcePerformancePath) {
+    try {
+        $sourcePerformanceData = [IO.File]::ReadAllText($sourcePerformancePath) | ConvertFrom-Json
+        $sourcePerformance = @($sourcePerformanceData)
+        $preferredHandles += @($sourcePerformance | Where-Object {
+            [int]$_.acceptedCount -ge 2 -and [double]$_.averageScore -ge 72
+        } | ForEach-Object { $_.handle })
+    } catch {}
+}
+$preferredHandles = @($preferredHandles | ForEach-Object {
+    ([string]$_).Trim().TrimStart('@')
+} | Where-Object { $_ } | Select-Object -Unique)
+$preferredHandleSet = @{}
+foreach ($handle in $preferredHandles) { $preferredHandleSet[$handle.ToLowerInvariant()] = $true }
+
+$candidateProperties = [ordered]@{
+    eventKey = @{ type = "string" }
+    source = @{ type = "string" }
+    handle = @{ type = "string" }
+    publishedAt = @{ type = "string" }
+    url = @{ type = "string" }
+    title = @{ type = "string" }
+    postText = @{ type = "string" }
+    threadContext = @{ type = "string" }
+    evidenceUrls = @{ type = "array"; items = @{ type = "string" }; maxItems = 4 }
+    hasImageEvidence = @{ type = "boolean" }
+    searchMatch = @{ type = "string" }
+}
+$candidateSchema = [ordered]@{
+    type = "object"
+    properties = [ordered]@{
+        candidates = @{
+            type = "array"
+            maxItems = $CandidatesPerEvent
+            items = [ordered]@{
+                type = "object"
+                properties = $candidateProperties
+                required = @($candidateProperties.Keys)
+                additionalProperties = $false
+            }
+        }
+    }
+    required = @("candidates")
+    additionalProperties = $false
+}
+
+$gradeProperties = [ordered]@{
+    url = @{ type = "string" }
+    summary = @{ type = "string" }
+    incrementalValue = @{ type = "string" }
+    analysisType = @{ type = "string"; enum = @("technical", "economic", "policy", "market", "skeptical", "synthesis", "repetition") }
+    analyticalValue = @{ type = "string"; enum = @("none", "low", "medium", "high", "exceptional") }
+    evidenceQuality = @{ type = "string"; enum = @("none", "limited", "specific", "strong") }
+    directRelevance = @{ type = "string"; enum = @("direct", "partial", "weak") }
+    independenceQuality = @{ type = "string"; enum = @("none", "partial", "strong") }
+    tone = @{ type = "string"; enum = @("neutral", "advocacy", "alarmist", "unclear") }
+    sourceFamiliarity = @{ type = "string"; enum = @("preferred", "established_new", "unknown") }
+    addsNewFacts = @{ type = "boolean" }
+    hasQuantification = @{ type = "boolean" }
+    hasDirectEvidenceLinks = @{ type = "boolean" }
+    isRepetition = @{ type = "boolean" }
+    appearsGenerated = @{ type = "boolean" }
+    respondsToCompletedEvent = @{ type = "boolean" }
+    language = @{ type = "string"; enum = @("English", "Other") }
+}
+$gradeSchema = [ordered]@{
+    type = "object"
+    properties = [ordered]@{
+        grades = @{
+            type = "array"
+            maxItems = ($CandidatesPerEvent * $MaxDiscoveryPasses)
+            items = [ordered]@{
+                type = "object"
+                properties = $gradeProperties
+                required = @($gradeProperties.Keys)
+                additionalProperties = $false
+            }
+        }
+    }
+    required = @("grades")
+    additionalProperties = $false
+}
+
+$candidateEvents = @()
+$gradingEvents = @()
+$apiKey = $null
+
+try {
+    if ($ReplayCandidates) {
+        if (-not (Test-Path -LiteralPath $candidateAuditPath) -or -not (Test-Path -LiteralPath $gradingAuditPath)) {
+            throw "Saved commentary candidates and grades are required for replay."
+        }
+        $candidateAudit = [IO.File]::ReadAllText($candidateAuditPath) | ConvertFrom-Json
+        $gradingAudit = [IO.File]::ReadAllText($gradingAuditPath) | ConvertFrom-Json
+        $candidateEvents = @($candidateAudit.events)
+        $gradingEvents = @($gradingAudit.events)
+        Write-Host "Replaying saved X candidates through deterministic scoring..." -ForegroundColor Cyan
+    }
+    else {
+        $apiKey = Get-XaiApiKey -ProjectRoot $projectRoot
+        $checkpointCandidatesByKey = @{}
+        $checkpointGradesByKey = @{}
+        if ((Test-Path -LiteralPath $candidateAuditPath) -and (Test-Path -LiteralPath $gradingAuditPath)) {
+            try {
+                $savedCandidateAudit = [IO.File]::ReadAllText($candidateAuditPath) | ConvertFrom-Json
+                $savedGradingAudit = [IO.File]::ReadAllText($gradingAuditPath) | ConvertFrom-Json
+                $checkpointAgeHours = ($nowUtc - ([datetime]$savedCandidateAudit.generatedAt).ToUniversalTime()).TotalHours
+                if ([int]$savedCandidateAudit.pipelineVersion -eq 2 -and [int]$savedGradingAudit.pipelineVersion -eq 2 -and $checkpointAgeHours -le 4) {
+                    foreach ($savedEvent in @($savedCandidateAudit.events)) { $checkpointCandidatesByKey[([string]$savedEvent.eventKey).ToLowerInvariant()] = $savedEvent }
+                    foreach ($savedEvent in @($savedGradingAudit.events)) { $checkpointGradesByKey[([string]$savedEvent.eventKey).ToLowerInvariant()] = $savedEvent }
+                }
+            } catch {}
+        }
+
+        for ($eventIndex = 0; $eventIndex -lt $events.Count; $eventIndex++) {
+            $event = $events[$eventIndex]
+            $eventKeyLower = ([string]$event.eventKey).ToLowerInvariant()
+            if ($checkpointCandidatesByKey.ContainsKey($eventKeyLower) -and $checkpointGradesByKey.ContainsKey($eventKeyLower)) {
+                Write-Host "Reusing completed X-search checkpoint - event $($eventIndex + 1) of $($events.Count)..." -ForegroundColor DarkCyan
+                $candidateEvents += $checkpointCandidatesByKey[$eventKeyLower]
+                $gradingEvents += $checkpointGradesByKey[$eventKeyLower]
+                continue
+            }
+            $eventPublishedUtc = ([datetime]$event.publishedAt).ToUniversalTime()
+            $fromDate = $eventPublishedUtc.ToString("yyyy-MM-dd")
+            $toDate = $nowUtc.ToString("yyyy-MM-dd")
+            $eventJson = $event | ConvertTo-Json -Depth 8 -Compress
+            $eventCandidates = @()
+            $passesRun = 0
+
+            for ($pass = 1; $pass -le $MaxDiscoveryPasses; $pass++) {
+                if ($pass -gt 1 -and $eventCandidates.Count -ge $MinimumCandidatesPerEvent) { break }
+                $passesRun = $pass
+                $existingUrls = @($eventCandidates | ForEach-Object { $_.url } | Select-Object -Unique)
+                $retryInstruction = if ($pass -eq 1) {
+                    "This is the primary discovery pass."
+                }
+                else {
+                    "The first pass found too few usable candidates. Broaden the search to aliases, abbreviations, quote posts, technical specialists, finance and infrastructure analysts, replies that contain substantive analysis, and unfamiliar authors. Exclude these URLs already found: $($existingUrls -join ', ')"
+                }
+
+                $discoveryPrompt = @"
+You are running high-recall X discovery for one verified AI-stack event in an institutional investor feed.
+
+Current time: $($nowUtc.ToString("o"))
+Verified event: $eventJson
+
+$retryInstruction
+
+Search X systematically from the event publication date through today. Perform distinct searches for:
+1. The exact event or product name and announcing entities.
+2. The primary-source URL, important metrics, technical terms and common abbreviations.
+3. Semantic discussion of the event's technical, economic, competitive, capacity, policy or supply-chain implications.
+4. Quote posts and threads responding to the completed announcement.
+
+Collect up to $CandidatesPerEvent real posts. Maximize recall at this stage: include substantive candidates even when they may later fail the quality screen. Do not grade or rank them. Do not return predictions, previews or posts that predate the completed event. Use image understanding when a post contains a chart, table or screenshot with relevant evidence. Return only direct https://x.com/.../status/... URLs found by X Search. Never invent a URL, author, timestamp, quotation or linked source. Copy the supplied eventKey exactly.
+"@
+                $discoveryBody = [ordered]@{
+                    model = $Model
+                    input = $discoveryPrompt
+                    tools = @(
+                        [ordered]@{
+                            type = "x_search"
+                            from_date = $fromDate
+                            to_date = $toDate
+                            enable_image_understanding = $true
+                        }
+                    )
+                    max_turns = 8
+                    text = [ordered]@{
+                        format = [ordered]@{
+                            type = "json_schema"
+                            name = "relevant_posts_x_candidate_discovery"
+                            schema = $candidateSchema
+                            strict = $true
+                        }
+                    }
+                    max_output_tokens = 8500
+                    store = $false
+                }
+
+                Write-Host "Finding X commentary - event $($eventIndex + 1) of $($events.Count), pass $pass..." -ForegroundColor Cyan
+                $discoveryResult = Invoke-XaiStructuredRequest $apiKey $discoveryBody "X discovery for $($event.title)"
+                foreach ($candidate in @($discoveryResult.candidates)) {
+                    $candidate.eventKey = [string]$event.eventKey
+                    if ($candidate.url -notmatch '^https://(www\.)?x\.com/[^/]+/status/\d+') { continue }
+                    try {
+                        $candidatePublishedUtc = ([datetime]$candidate.publishedAt).ToUniversalTime()
+                        if ($candidatePublishedUtc -lt $eventPublishedUtc -or $candidatePublishedUtc -gt $nowUtc.AddMinutes(10)) { continue }
+                        $candidate.publishedAt = $candidatePublishedUtc.ToString("o")
+                    }
+                    catch { continue }
+                    $canonical = Get-CanonicalUrl ([string]$candidate.url)
+                    if (@($eventCandidates | Where-Object { (Get-CanonicalUrl ([string]$_.url)) -eq $canonical }).Count -eq 0) {
+                        if (-not $candidate.source -or $candidate.source -eq "X") { $candidate.source = [string]$candidate.handle }
+                        $eventCandidates += $candidate
+                    }
+                }
+            }
+
+            $candidateEvents += [pscustomobject]@{
+                eventKey = [string]$event.eventKey
+                eventTitle = [string]$event.title
+                passesRun = $passesRun
+                candidates = @($eventCandidates)
+            }
+
+            if ($eventCandidates.Count -eq 0) {
+                $gradingEvents += [pscustomobject]@{
+                    eventKey = [string]$event.eventKey
+                    grades = @()
+                }
+                $candidateCheckpoint = [ordered]@{ pipelineVersion = 2; generatedAt = $nowUtc.ToString("o"); targetCandidatesPerEvent = $CandidatesPerEvent; minimumCandidatesPerEvent = $MinimumCandidatesPerEvent; events = $candidateEvents }
+                $gradingCheckpoint = [ordered]@{ pipelineVersion = 2; generatedAt = $nowUtc.ToString("o"); events = $gradingEvents }
+                [IO.File]::WriteAllText($candidateAuditPath, ($candidateCheckpoint | ConvertTo-Json -Depth 20), $utf8)
+                [IO.File]::WriteAllText($gradingAuditPath, ($gradingCheckpoint | ConvertTo-Json -Depth 20), $utf8)
+                continue
+            }
+
+            $candidatesJson = $eventCandidates | ConvertTo-Json -Depth 10 -Compress
+            $candidatesJson = [Text.Encoding]::UTF8.GetString([Text.Encoding]::UTF8.GetBytes($candidatesJson))
+            $gradingPrompt = @"
+You are the evidence editor for an institutional investor feed. Grade supplied X candidates for commentary value on one verified event. Do not search for new posts and do not assign numerical scores.
+
+Current time: $($nowUtc.ToString("o"))
+Verified event: $eventJson
+Preferred handles: $($preferredHandles -join ', ')
+Candidates: $candidatesJson
+
+For every candidate URL, label only what the supplied post and thread context support. Commentary must respond to the completed event, be directly relevant, professional and add analysis beyond announcement repetition. Treat popularity and author fame as weak evidence. A useful unfamiliar author is allowed; unfamiliarity lowers source confidence but is not a rejection rule. Mark generated-looking roundups, sensational framing and unsupported claims honestly. Use established_new only for a recognizable specialist, company, journalist or analyst with a relevant track record. Keep summary under 45 words and incrementalValue to one sentence. Return one grade for every supplied URL and never invent content.
+"@
+            $gradingBody = [ordered]@{
+                model = $Model
+                input = $gradingPrompt
+                text = [ordered]@{
+                    format = [ordered]@{
+                        type = "json_schema"
+                        name = "relevant_posts_x_candidate_grading"
+                        schema = $gradeSchema
+                        strict = $true
+                    }
+                }
+                max_output_tokens = 8500
+                store = $false
+            }
+            $gradingResult = Invoke-XaiStructuredRequest $apiKey $gradingBody "commentary grading for $($event.title)"
+            $gradingEvents += [pscustomobject]@{
+                eventKey = [string]$event.eventKey
+                grades = @($gradingResult.grades)
+            }
+            $candidateCheckpoint = [ordered]@{ pipelineVersion = 2; generatedAt = $nowUtc.ToString("o"); targetCandidatesPerEvent = $CandidatesPerEvent; minimumCandidatesPerEvent = $MinimumCandidatesPerEvent; events = $candidateEvents }
+            $gradingCheckpoint = [ordered]@{ pipelineVersion = 2; generatedAt = $nowUtc.ToString("o"); events = $gradingEvents }
+            [IO.File]::WriteAllText($candidateAuditPath, ($candidateCheckpoint | ConvertTo-Json -Depth 20), $utf8)
+            [IO.File]::WriteAllText($gradingAuditPath, ($gradingCheckpoint | ConvertTo-Json -Depth 20), $utf8)
+        }
+
+        $candidateAudit = [ordered]@{
+            pipelineVersion = 2
+            generatedAt = $nowUtc.ToString("o")
+            targetCandidatesPerEvent = $CandidatesPerEvent
+            minimumCandidatesPerEvent = $MinimumCandidatesPerEvent
+            events = $candidateEvents
+        }
+        $gradingAudit = [ordered]@{
+            pipelineVersion = 2
+            generatedAt = $nowUtc.ToString("o")
+            events = $gradingEvents
+        }
+        [IO.File]::WriteAllText($candidateAuditPath, ($candidateAudit | ConvertTo-Json -Depth 20), $utf8)
+        [IO.File]::WriteAllText($gradingAuditPath, ($gradingAudit | ConvertTo-Json -Depth 20), $utf8)
+    }
+}
+finally {
+    Remove-Variable apiKey -ErrorAction SilentlyContinue
+}
+
+$analysisPoints = @{ none = 0; low = 15; medium = 25; high = 33; exceptional = 38 }
+$evidencePoints = @{ none = 2; limited = 9; specific = 17; strong = 22 }
+$sourcePoints = @{ preferred = 15; established_new = 11; unknown = 7 }
+$independencePoints = @{ none = 0; partial = 6; strong = 10 }
+
 $eventByKey = @{}
 foreach ($event in $events) { $eventByKey[([string]$event.eventKey).ToLowerInvariant()] = $event }
-$rssByUrl = @{}
-foreach ($rss in $rssCandidates) { $rssByUrl[(Get-CanonicalUrl ([string]$rss.url))] = $rss }
+$gradesByEvent = @{}
+foreach ($gradingEvent in $gradingEvents) {
+    $gradesByEvent[([string]$gradingEvent.eventKey).ToLowerInvariant()] = @($gradingEvent.grades)
+}
 
 $accepted = @()
 $rejected = @()
-foreach ($item in @($result.candidates)) {
-    $reasons = @()
-    $eventKey = ([string]$item.eventKey).Trim().ToLowerInvariant()
-    if (-not $eventByKey.ContainsKey($eventKey)) { $reasons += "Event key does not match a verified event." }
-
-    $item.insight = [Math]::Max(0, [Math]::Min(35, [int]$item.insight))
-    $item.evidence = [Math]::Max(0, [Math]::Min(25, [int]$item.evidence))
-    $item.relevance = [Math]::Max(0, [Math]::Min(25, [int]$item.relevance))
-    $item.independence = [Math]::Max(0, [Math]::Min(15, [int]$item.independence))
-    $item.score = [int]$item.insight + [int]$item.evidence + [int]$item.relevance + [int]$item.independence
-    $excess = [Math]::Max(0, [int]$item.score - 89)
-    foreach ($field in @("insight", "evidence", "relevance", "independence")) {
-        if ($excess -le 0) { break }
-        $reduction = [Math]::Min([int]$item.$field, $excess)
-        $item.$field = [int]$item.$field - $reduction
-        $excess -= $reduction
+$coverage = @()
+foreach ($candidateEvent in $candidateEvents) {
+    $eventKey = ([string]$candidateEvent.eventKey).ToLowerInvariant()
+    if (-not $eventByKey.ContainsKey($eventKey)) { continue }
+    $event = $eventByKey[$eventKey]
+    $eventPublishedUtc = ([datetime]$event.publishedAt).ToUniversalTime()
+    $candidates = @($candidateEvent.candidates)
+    $candidateByUrl = @{}
+    foreach ($candidate in $candidates) {
+        $candidateByUrl[(Get-CanonicalUrl ([string]$candidate.url))] = $candidate
     }
-    $item.score = [int]$item.insight + [int]$item.evidence + [int]$item.relevance + [int]$item.independence
 
-    $canonicalUrl = Get-CanonicalUrl ([string]$item.url)
-    if ($item.platform -eq "X") {
-        if ($item.url -notmatch '^https://(www\.)?x\.com/[^/]+/status/\d+') { $reasons += "X result is not a direct post URL." }
-    }
-    elseif ($item.platform -eq "Substack") {
-        if (-not $rssByUrl.ContainsKey($canonicalUrl)) { $reasons += "Newsletter URL was not in the collected RSS candidates." }
-        else {
-            $rssMatch = $rssByUrl[$canonicalUrl]
-            $item.source = [string]$rssMatch.source
-            $item.title = [string]$rssMatch.title
-            $item.publishedAt = [string]$rssMatch.publishedAt
-            $item.url = [string]$rssMatch.url
+    $grades = if ($gradesByEvent.ContainsKey($eventKey)) { @($gradesByEvent[$eventKey]) } else { @() }
+    foreach ($grade in $grades) {
+        $canonicalUrl = Get-CanonicalUrl ([string]$grade.url)
+        if (-not $candidateByUrl.ContainsKey($canonicalUrl)) { continue }
+        $candidate = $candidateByUrl[$canonicalUrl]
+        $reasons = @()
+        $handle = ([string]$candidate.handle).Trim().TrimStart('@')
+        $familiarity = ([string]$grade.sourceFamiliarity).ToLowerInvariant()
+        if ($preferredHandleSet.ContainsKey($handle.ToLowerInvariant())) { $familiarity = "preferred" }
+        if (-not $sourcePoints.ContainsKey($familiarity)) { $familiarity = "unknown" }
+
+        try {
+            $publishedUtc = ([datetime]$candidate.publishedAt).ToUniversalTime()
+            if ($publishedUtc -lt $eventPublishedUtc) { $reasons += "Commentary predates the verified event." }
+            $ageHours = ($nowUtc - $publishedUtc).TotalHours
+        }
+        catch {
+            $publishedUtc = $nowUtc
+            $ageHours = 999
+            $reasons += "Commentary publication time is invalid."
+        }
+
+        $recencyScore = if ($ageHours -le 6) { 10 } elseif ($ageHours -le 12) { 9 } elseif ($ageHours -le 24) { 8 } elseif ($ageHours -le 48) { 6 } elseif ($ageHours -le 72) { 4 } else { 2 }
+        $analyticalScore = if ($analysisPoints.ContainsKey([string]$grade.analyticalValue)) { [int]$analysisPoints[[string]$grade.analyticalValue] } else { 0 }
+        $evidenceScore = if ($evidencePoints.ContainsKey([string]$grade.evidenceQuality)) { [int]$evidencePoints[[string]$grade.evidenceQuality] } else { 2 }
+        if ([bool]$grade.hasQuantification) { $evidenceScore += 2 }
+        if ([bool]$grade.hasDirectEvidenceLinks -and @($candidate.evidenceUrls).Count -gt 0) { $evidenceScore += 1 }
+        $evidenceScore = [Math]::Min(25, $evidenceScore)
+        $sourceScore = [int]$sourcePoints[$familiarity]
+        $independenceScore = if ($independencePoints.ContainsKey([string]$grade.independenceQuality)) { [int]$independencePoints[[string]$grade.independenceQuality] } else { 0 }
+        $score = $analyticalScore + $evidenceScore + $sourceScore + $independenceScore + $recencyScore
+        $scoreCap = if ($familiarity -eq "preferred") { 89 } elseif ($familiarity -eq "established_new") { 87 } else { 84 }
+        $score = [Math]::Min($scoreCap, $score)
+
+        if ([string]$grade.directRelevance -ne "direct") { $reasons += "Not directly relevant to the verified event." }
+        if (-not [bool]$grade.respondsToCompletedEvent) { $reasons += "Does not clearly respond to the completed event." }
+        if ([string]$grade.language -ne "English") { $reasons += "Not presentation-ready English." }
+        if ([string]$grade.tone -ne "neutral") { $reasons += "Tone is advocacy, alarmist or unclear." }
+        if ([bool]$grade.isRepetition -or [string]$grade.analysisType -eq "repetition") { $reasons += "Repeats the announcement without useful analysis." }
+        if ([bool]$grade.appearsGenerated) { $reasons += "Appears to be a generated roundup." }
+        if ([string]$grade.analyticalValue -in @("none", "low")) { $reasons += "Insufficient incremental analytical value." }
+        if ($score -lt $MinimumCommentaryScore) { $reasons += "Below the deterministic $MinimumCommentaryScore-point threshold." }
+
+        if ($reasons.Count) {
+            $rejected += [pscustomobject]@{
+                eventKey = [string]$event.eventKey
+                source = if ($candidate.source) { [string]$candidate.source } else { $handle }
+                title = [string]$candidate.title
+                url = [string]$candidate.url
+                score = [int]$score
+                rejectionReasons = @($reasons | Select-Object -Unique)
+            }
+            continue
+        }
+
+        $accepted += [pscustomobject][ordered]@{
+            eventKey = [string]$event.eventKey
+            source = if ($candidate.source) { [string]$candidate.source } else { $handle }
+            handle = $handle
+            platform = "X"
+            publishedAt = $publishedUtc.ToString("o")
+            url = [string]$candidate.url
+            title = [string]$candidate.title
+            summary = [string]$grade.summary
+            incrementalValue = [string]$grade.incrementalValue
+            analysisType = [string]$grade.analysisType
+            commentaryScore = [int]$score
+            analyticalScore = [int]$analyticalScore
+            evidenceScore = [int]$evidenceScore
+            sourceScore = [int]$sourceScore
+            independenceScore = [int]$independenceScore
+            recencyScore = [int]$recencyScore
+            addsNewFacts = [bool]$grade.addsNewFacts
+            hasQuantification = [bool]$grade.hasQuantification
+            hasDirectEvidenceLinks = [bool]$grade.hasDirectEvidenceLinks
+            language = [string]$grade.language
+            tone = [string]$grade.tone
+            sourceFamiliarity = $familiarity
+            temporalRelation = "after_event"
+            respondsToCompletedEvent = [bool]$grade.respondsToCompletedEvent
         }
     }
 
-    $eventPublishedUtc = $null
-    if ($eventByKey.ContainsKey($eventKey)) {
-        $event = $eventByKey[$eventKey]
-        if ((Get-CanonicalUrl ([string]$event.url)) -eq (Get-CanonicalUrl ([string]$item.url))) {
-            $reasons += "Commentary URL is the primary source."
-        }
-        try { $eventPublishedUtc = ([datetime]$event.publishedAt).ToUniversalTime() } catch { $reasons += "Verified event publication time is invalid." }
-    }
-
-    try {
-        $publishedUtc = ([datetime]$item.publishedAt).ToUniversalTime()
-        $ageDays = ($nowUtc - $publishedUtc).TotalDays
-        if ($ageDays -lt -0.1 -or $ageDays -gt ($LookbackDays + 1)) { $reasons += "Commentary is outside the allowed time window." }
-        if ($eventPublishedUtc -and $publishedUtc -lt $eventPublishedUtc) { $reasons += "Commentary predates the verified event." }
-    }
-    catch {
-        $reasons += "Commentary publication time is invalid."
-    }
-
-    if ($item.decision -ne "include") {
-        $reasons += $(if ($item.rejectionReason) { [string]$item.rejectionReason } else { "Commentary editor excluded the item." })
-    }
-    if ($item.score -lt $MinimumCommentaryScore) { $reasons += "Below the $MinimumCommentaryScore-point commentary threshold." }
-    if ([int]$item.insight -lt 22) { $reasons += "Insufficient incremental analytical insight." }
-    if (-not $item.isIndependent -or [int]$item.independence -lt 8) { $reasons += "Insufficient independence from the announcement." }
-    if ($item.analysisType -eq "repetition") { $reasons += "Repeats the announcement without useful added analysis." }
-    if ($item.temporalRelation -ne "after_event" -or -not $item.respondsToCompletedEvent) {
-        $reasons += "Post is a prediction, preview or temporally unclear rather than post-event commentary."
-    }
-    if ($item.language -ne "English" -or ([string]$item.title) -match '[^\x00-\x7F]') { $reasons += "Commentary is not presentation-ready English." }
-    if ($item.tone -ne "neutral") { $reasons += "Commentary tone is advocacy, alarmist or unclear rather than neutral." }
-    if (([string]$item.title) -match '(?i)\b(entire category|everyone|no one|destroy|catastroph|doom|panic|insane|scam|fraud)\b|tried to get .{0,40}\bbanned\b') {
-        $reasons += "Sensational or motive-attributing headline."
-    }
-    if ($item.sourceFamiliarity -eq "unknown" -and (-not $item.hasDirectEvidenceLinks -or -not $item.hasQuantification)) {
-        $reasons += "Unfamiliar source must provide both meaningful quantification and a direct evidence link."
-    }
-
-    if ($reasons.Count) {
-        $rejected += [pscustomobject]@{
-            eventKey = [string]$item.eventKey
-            source = [string]$item.source
-            title = [string]$item.title
-            url = [string]$item.url
-            score = [int]$item.score
-            rejectionReasons = @($reasons | Select-Object -Unique)
-        }
-        continue
-    }
-
-    $accepted += [pscustomobject][ordered]@{
-        eventKey = [string]$item.eventKey
-        source = [string]$item.source
-        handle = [string]$item.handle
-        platform = [string]$item.platform
-        publishedAt = $publishedUtc.ToString("o")
-        url = [string]$item.url
-        title = [string]$item.title
-        summary = [string]$item.summary
-        incrementalValue = [string]$item.incrementalValue
-        analysisType = [string]$item.analysisType
-        commentaryScore = [int]$item.score
-        insight = [int]$item.insight
-        evidence = [int]$item.evidence
-        relevance = [int]$item.relevance
-        independence = [int]$item.independence
-        addsNewFacts = [bool]$item.addsNewFacts
-        hasQuantification = [bool]$item.hasQuantification
-        isIndependent = [bool]$item.isIndependent
-        hasDirectEvidenceLinks = [bool]$item.hasDirectEvidenceLinks
-        language = [string]$item.language
-        tone = [string]$item.tone
-        sourceFamiliarity = [string]$item.sourceFamiliarity
-        temporalRelation = [string]$item.temporalRelation
-        respondsToCompletedEvent = [bool]$item.respondsToCompletedEvent
+    $qualifyingForEvent = @($accepted | Where-Object { ([string]$_.eventKey).ToLowerInvariant() -eq $eventKey })
+    $coverage += [pscustomobject]@{
+        eventKey = [string]$event.eventKey
+        eventTitle = [string]$event.title
+        searchPasses = [int]$candidateEvent.passesRun
+        candidatesFound = $candidates.Count
+        candidatesGraded = $grades.Count
+        qualifyingCommentary = $qualifyingForEvent.Count
+        status = if ($qualifyingForEvent.Count -gt 0) { "covered" } elseif ($candidates.Count -lt $MinimumCandidatesPerEvent) { "insufficient_recall_primary_fallback" } else { "quality_screen_primary_fallback" }
     }
 }
 
@@ -370,24 +531,83 @@ $selected = @($accepted |
     Group-Object { ([string]$_.eventKey).ToLowerInvariant() } |
     ForEach-Object {
         $_.Group | Sort-Object `
-            @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true }, `
             @{ Expression = { [int]$_.commentaryScore }; Descending = $true }, `
-            @{ Expression = { [int]$_.insight }; Descending = $true } |
+            @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true } |
             Select-Object -First 1
     } |
     Sort-Object @{ Expression = { [int]$_.commentaryScore }; Descending = $true })
 
+$previousAcceptedUrlsByHandle = @{}
+if (Test-Path -LiteralPath $outputPath) {
+    try {
+        $previousCommentaryFeed = [IO.File]::ReadAllText($outputPath) | ConvertFrom-Json
+        foreach ($previousCommentary in @($previousCommentaryFeed.commentaries)) {
+            $previousHandleKey = ([string]$previousCommentary.handle).Trim().TrimStart('@').ToLowerInvariant()
+            if (-not $previousHandleKey) { continue }
+            if (-not $previousAcceptedUrlsByHandle.ContainsKey($previousHandleKey)) {
+                $previousAcceptedUrlsByHandle[$previousHandleKey] = @()
+            }
+            $previousAcceptedUrlsByHandle[$previousHandleKey] += Get-CanonicalUrl ([string]$previousCommentary.url)
+        }
+    } catch {}
+}
+
+$performanceByHandle = @{}
+foreach ($record in $sourcePerformance) {
+    $key = ([string]$record.handle).Trim().TrimStart('@').ToLowerInvariant()
+    if (-not $key) { continue }
+    if (-not $record.PSObject.Properties["acceptedUrls"]) {
+        $seedUrls = if ($previousAcceptedUrlsByHandle.ContainsKey($key)) {
+            @($previousAcceptedUrlsByHandle[$key] | Select-Object -Unique)
+        } else { @() }
+        $record | Add-Member -NotePropertyName acceptedUrls -NotePropertyValue $seedUrls
+    }
+    $performanceByHandle[$key] = $record
+}
+foreach ($commentary in $selected) {
+    $key = ([string]$commentary.handle).Trim().TrimStart('@').ToLowerInvariant()
+    if (-not $key) { continue }
+    $commentaryUrl = Get-CanonicalUrl ([string]$commentary.url)
+    if ($performanceByHandle.ContainsKey($key)) {
+        $record = $performanceByHandle[$key]
+        $knownUrls = @($record.acceptedUrls | ForEach-Object { Get-CanonicalUrl ([string]$_) })
+        if ($knownUrls -contains $commentaryUrl) { continue }
+        $record.acceptedUrls = @($knownUrls + $commentaryUrl | Select-Object -Unique)
+        $record.acceptedCount = [int]$record.acceptedCount + 1
+        $record.totalScore = [int]$record.totalScore + [int]$commentary.commentaryScore
+        $record.averageScore = [Math]::Round([double]$record.totalScore / [double]$record.acceptedCount, 1)
+        $record.lastAcceptedAt = $nowUtc.ToString("o")
+    }
+    else {
+        $performanceByHandle[$key] = [pscustomobject][ordered]@{
+            handle = [string]$commentary.handle
+            acceptedCount = 1
+            totalScore = [int]$commentary.commentaryScore
+            averageScore = [double]$commentary.commentaryScore
+            lastAcceptedAt = $nowUtc.ToString("o")
+            acceptedUrls = @($commentaryUrl)
+        }
+    }
+}
+
 [IO.File]::WriteAllText($rejectionAuditPath, ($rejected | ConvertTo-Json -Depth 10), $utf8)
+[IO.File]::WriteAllText($coverageAuditPath, ($coverage | ConvertTo-Json -Depth 10), $utf8)
+$performanceOutput = @($performanceByHandle.Values | Sort-Object `
+    @{ Expression = { [int]$_.acceptedCount }; Descending = $true }, `
+    @{ Expression = { [double]$_.averageScore }; Descending = $true })
+[IO.File]::WriteAllText($sourcePerformancePath, ($performanceOutput | ConvertTo-Json -Depth 10), $utf8)
 
 $feed = [ordered]@{
     generatedAt = $nowUtc.ToString("o")
-    source = "Targeted X and newsletter commentary"
+    source = "High-recall X commentary"
     eventsExamined = $events.Count
     minimumCommentaryScore = $MinimumCommentaryScore
     preferredHandles = $preferredHandles
+    coverage = $coverage
     commentaries = $selected
 }
 [IO.File]::WriteAllText($outputPath, ($feed | ConvertTo-Json -Depth 20), $utf8)
 
 & (Join-Path $PSScriptRoot "merge-live-feeds.ps1") | Out-Host
-Write-Host "Selected commentary for $($selected.Count) of $($events.Count) verified events; $($rejected.Count) candidates were excluded." -ForegroundColor Green
+$coveredCount = @($coverage | Where-Object { $_.status -eq "covered" }).Count
+Write-Host "Selected high-quality X commentary for $coveredCount of $($events.Count) verified events; $($rejected.Count) candidates were excluded." -ForegroundColor Green

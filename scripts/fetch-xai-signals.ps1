@@ -45,7 +45,19 @@ $eventGatedHandles = @(
     "sama",
     "gdb"
 )
-$handles = @($coreHandles + $contextHandles + $eventGatedHandles)
+$sourcePerformancePath = Join-Path $projectRoot "work\x-source-performance.json"
+if (Test-Path -LiteralPath $sourcePerformancePath) {
+    try {
+        $sourcePerformanceData = [IO.File]::ReadAllText($sourcePerformancePath) | ConvertFrom-Json
+        $promotedHandles = @($sourcePerformanceData |
+            Where-Object { [int]$_.acceptedCount -ge 2 -and [double]$_.averageScore -ge 72 } |
+            ForEach-Object { ([string]$_.handle).Trim().TrimStart('@') } |
+            Where-Object { $_ } |
+            Select-Object -First 10)
+        $contextHandles = @($contextHandles + $promotedHandles | Select-Object -Unique)
+    } catch {}
+}
+$handles = @($coreHandles + $contextHandles + $eventGatedHandles | Select-Object -Unique)
 $tierByHandle = @{}
 foreach ($handle in $coreHandles) { $tierByHandle[$handle.ToLowerInvariant()] = "core" }
 foreach ($handle in $contextHandles) { $tierByHandle[$handle.ToLowerInvariant()] = "context" }
@@ -61,7 +73,7 @@ $candidateLimit = [Math]::Min(30, [Math]::Max(15, $MaxSignals * 2))
 $prompt = @"
 You are the intake editor for an institutional asset-management AI intelligence feed.
 
-Search X only within the allowed handles supplied to the x_search tool. Find posts published after $($fromTime.ToUniversalTime().ToString("o")) and before $nowIso. Return up to $candidateLimit plausible candidates scoring at least 40 so the local policy layer can audit both admissions and rejections. Use the fewest X search calls necessary. For only the most material candidate claims, use no more than two Web Search calls in total to look for genuinely independent corroboration.
+Search X only within the allowed handles supplied to the x_search tool. Find posts published after $($fromTime.ToUniversalTime().ToString("o")) and before $nowIso. Return up to $candidateLimit plausible candidates scoring at least 40 so the local policy layer can audit both admissions and rejections. Inspect every supplied handle and use multiple keyword, semantic and thread searches where needed; do not stop after the first few accounts produce results. For only the most material candidate claims, use no more than two Web Search calls in total to look for genuinely independent corroboration.
 
 Cover material developments across AI labs, models, memory, semiconductors, chips, hardware, energy, datacenters, hyperscalers, software and policy. Exclude routine promotion, recycled news, engagement bait, personality drama, vague claims, ordinary replies and reposts without new information. Deduplicate multiple posts about the same underlying event; retain the most primary and informative post.
 
@@ -149,9 +161,11 @@ $requestBody = [ordered]@{
             allowed_x_handles = @()
             from_date = $fromDate
             to_date = $toDate
+            enable_image_understanding = $true
         },
         [ordered]@{ type = "web_search" }
     )
+    max_turns = 6
     text = [ordered]@{
         format = [ordered]@{
             type = "json_schema"
@@ -165,8 +179,8 @@ $requestBody = [ordered]@{
 }
 
 $handleBatches = @()
-for ($offset = 0; $offset -lt $handles.Count; $offset += 15) {
-    $lastIndex = [Math]::Min($offset + 14, $handles.Count - 1)
+for ($offset = 0; $offset -lt $handles.Count; $offset += 10) {
+    $lastIndex = [Math]::Min($offset + 9, $handles.Count - 1)
     $handleBatches += ,@($handles[$offset..$lastIndex])
 }
 

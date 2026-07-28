@@ -9,6 +9,12 @@ param(
     [ValidateRange(1, 20)]
     [int]$MaxEvents = 12,
 
+    [ValidateRange(1, 8)]
+    [int]$MinimumCandidatesPerLane = 5,
+
+    [ValidateRange(1, 3)]
+    [int]$MaxDiscoveryPasses = 2,
+
     [string]$Model = "grok-4.5",
 
     [switch]$ReplayCandidates
@@ -21,10 +27,46 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $outputPath = Join-Path $projectRoot "outputs\live-breaking-feed.json"
 $diagnosticDirectory = Join-Path $projectRoot "work"
 $candidatesPath = Join-Path $diagnosticDirectory "breaking-candidates.json"
+$historyPath = Join-Path $diagnosticDirectory "verified-event-history.json"
+$publishedDashboardPath = Join-Path $projectRoot "docs\index.html"
 . (Join-Path $PSScriptRoot "xai-key.ps1")
 
 New-Item -ItemType Directory -Path $diagnosticDirectory -Force | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding($false)
+$previousSignals = @()
+
+if (Test-Path -LiteralPath $historyPath) {
+    try {
+        $history = [IO.File]::ReadAllText($historyPath) | ConvertFrom-Json
+        $previousSignals += @($history.signals)
+    } catch {}
+}
+if (Test-Path -LiteralPath $publishedDashboardPath) {
+    try {
+        $publishedHtml = [IO.File]::ReadAllText($publishedDashboardPath)
+        $signalMatch = [regex]::Match($publishedHtml, '(?s)const demoSignals = (\[.*?\]);\s*const ')
+        if ($signalMatch.Success) {
+            $publishedSignalData = $signalMatch.Groups[1].Value | ConvertFrom-Json
+            $publishedSignals = @($publishedSignalData)
+            foreach ($publishedSignal in @($publishedSignals | Where-Object { [bool]$_.mustInclude })) {
+                if ($publishedSignal.primarySourceUrl) {
+                    $publishedSignal.url = [string]$publishedSignal.primarySourceUrl
+                    $publishedSignal.source = [string]$publishedSignal.primarySourceName
+                    $publishedSignal.platform = [string]$publishedSignal.primarySourcePlatform
+                    $publishedSignal.publishedAt = [string]$publishedSignal.eventPublishedAt
+                }
+                $previousSignals += $publishedSignal
+            }
+        }
+    } catch {}
+}
+
+if (Test-Path -LiteralPath $outputPath) {
+    try {
+        $previousFeed = [IO.File]::ReadAllText($outputPath) | ConvertFrom-Json
+        $previousSignals += @($previousFeed.signals)
+    } catch {}
+}
 
 $now = Get-Date
 $nowUtc = $now.ToUniversalTime()
@@ -32,14 +74,40 @@ $primaryCutoff = $nowUtc.AddHours(-$PrimaryLookbackHours)
 $fallbackCutoff = $nowUtc.AddHours(-$FallbackLookbackHours)
 $fromDate = $fallbackCutoff.ToString("yyyy-MM-dd")
 $toDate = $nowUtc.ToString("yyyy-MM-dd")
-$candidateLimit = [Math]::Min(24, [Math]::Max(12, $MaxEvents * 2))
+$laneCandidateLimit = 8
+$discoveryLanes = @(
+    [pscustomobject]@{
+        name = "Models and laboratories"
+        focus = "Frontier and open-weight model launches, weights, model cards, important repository changes, benchmark-changing research and material laboratory disclosures. Explicitly inspect official lab pages, Hugging Face, GitHub and broad X discussion."
+    },
+    [pscustomobject]@{
+        name = "Chips memory and hardware"
+        focus = "AI accelerators, custom silicon, memory and HBM, foundry, advanced packaging, networking, server hardware, supply constraints, capacity commitments and material customer or financing disclosures."
+    },
+    [pscustomobject]@{
+        name = "Datacenters energy and networking"
+        focus = "Datacenter leases and construction, power procurement and generation, cooling, networking capacity, financing and measurable infrastructure commitments that change available AI compute."
+    },
+    [pscustomobject]@{
+        name = "Hyperscalers and enterprise AI"
+        focus = "Material hyperscaler, cloud and enterprise-AI launches, deployments, customer wins, earnings disclosures and economic data. Exclude routine partnerships and promotional product updates."
+    },
+    [pscustomobject]@{
+        name = "Policy standards and open source"
+        focus = "Government actions, regulation, export controls, standards, public letters, coalitions, open-source or open-weight policy and coordinated industry positions with direct competitive or access implications."
+    },
+    [pscustomobject]@{
+        name = "Market-moving capital capacity and earnings"
+        focus = "Same-day public-company filings, earnings, financings, investments, leases, customer commitments, capacity reservations and quantified deal terms across the AI stack. Prioritize developments likely to matter to public-equity analysts, including smaller suppliers and infrastructure companies that broad technology scans often miss."
+    }
+)
 
 $prompt = @"
 You are the breaking-events editor for an institutional asset-management AI intelligence feed.
 
 Current time: $($nowUtc.ToString("o"))
 
-Your job is event discovery, not account monitoring. Search broadly across unrestricted X and the web for material AI-stack developments. Do not limit discovery to familiar accounts, publishers or companies.
+Your job is high-recall event discovery for one defined AI-stack lane, not account monitoring. Search broadly across unrestricted X and the web. Do not limit discovery to familiar accounts, publishers or companies. Use X attention to find events, then verify every included event against a direct primary source.
 
 Use this sequence:
 1. Discover potentially material events first published after $($primaryCutoff.ToString("o")).
@@ -47,15 +115,7 @@ Use this sequence:
 3. If fewer than five verified major events qualify in that 24-hour window, supplement with the strongest verified events first published after $($fallbackCutoff.ToString("o")).
 4. Cluster all posts and articles about the same underlying development into one event. Choose the primary source as the event URL and attach genuinely independent coverage as supporting URLs.
 
-Run distinct discovery lanes before ranking:
-- Frontier and open-weight model launches, weights, model cards and important repository changes, including Hugging Face and GitHub.
-- Policy actions, public letters, standards, coalitions and coordinated industry positions involving AI access, safety, regulation or open source.
-- Compute, memory, semiconductor, networking, power and datacenter capacity or financing.
-- Material laboratory, hyperscaler and enterprise-AI product or economic disclosures.
-
-Before finalizing, explicitly check official AI-lab and hyperscaler newsrooms plus broad X discussion for a major model/weights release or AI-policy coalition that a generic news query may have missed. Use X attention to discover an event, never as its verification.
-
-Search the entire AI stack: frontier and open-weight models, laboratories, memory, chips, semiconductors, hardware, energy, datacenters, hyperscalers, cloud, networking, software, policy, financing, supply chains and material customer deployments.
+Search the assigned lane systematically. Use multiple keyword and semantic searches rather than stopping after the first plausible result. Check both official sources and broad X discussion, including unfamiliar accounts. Avoid duplicating an event merely because multiple posts discuss it.
 
 A major event changes capabilities, access, economics, capacity, regulation or competitive position. Examples include a model or weights release, benchmark-changing research, a material financing or capacity commitment, a filing or earnings disclosure, a major policy action or coalition, or a measurable infrastructure/supply-chain change. Routine promotion, partnerships without substance, repeated commentary, personality drama, engagement bait, vague claims and recycled news are not major events.
 
@@ -69,7 +129,7 @@ Score the EVENT, not a post or author's fame, conservatively:
 
 The total must equal the four components. Scores above 85 should be rare. A model release or policy letter alone should not score 90+. Reserve 90+ for an independently confirmed development with exceptional, measurable first-order market or capacity consequences. A short official announcement can still be a must-include major event even when analytical depth is low. Verified major events must be marked mustInclude and returned even when their score is below 60. Rumors and events without primary verification must be excluded.
 
-For auditability, return up to $candidateLimit plausible candidate events, including excluded candidates. Set decision to include only for verified, genuinely material events. Give every excluded candidate a concise rejectionReason. Return no more than $MaxEvents included events.
+For auditability, return up to $laneCandidateLimit plausible candidate events for this lane, including excluded candidates. Set decision to include only for verified, genuinely material events. Give every excluded candidate a concise rejectionReason.
 
 Use neutral titles. Keep summaries factual and under 55 words. The implication should state the analyst question rather than an investment recommendation. Use one or more sectors from: Labs, Models, Memory, Chips, Semis, Hardware, Energy, Datacenters, Hyperscalers, Software, Policy, Networking, Cloud.
 "@
@@ -114,7 +174,7 @@ $schema = [ordered]@{
         generatedAt = @{ type = "string" }
         candidates = @{
             type = "array"
-            maxItems = $candidateLimit
+            maxItems = $laneCandidateLimit
             items = [ordered]@{
                 type = "object"
                 properties = $candidateProperties
@@ -138,6 +198,7 @@ $requestBody = [ordered]@{
         },
         [ordered]@{ type = "web_search" }
     )
+    max_turns = 6
     text = [ordered]@{
         format = [ordered]@{
             type = "json_schema"
@@ -146,7 +207,7 @@ $requestBody = [ordered]@{
             strict = $true
         }
     }
-    max_output_tokens = 16000
+    max_output_tokens = 7000
     store = $false
 }
 
@@ -157,15 +218,101 @@ if ($ReplayCandidates) {
 }
 else {
     $apiKey = Get-XaiApiKey -ProjectRoot $projectRoot
+    $allCandidates = @()
+    $laneAudit = @()
     try {
-        Write-Host "Scanning broadly for breaking AI-stack events..." -ForegroundColor Cyan
-        $response = Invoke-RestMethod `
+        for ($laneIndex = 0; $laneIndex -lt $discoveryLanes.Count; $laneIndex++) {
+            $lane = $discoveryLanes[$laneIndex]
+            $laneCandidates = @()
+            $lanePasses = 0
+            for ($pass = 1; $pass -le $MaxDiscoveryPasses; $pass++) {
+                $lanePasses = $pass
+                $alreadyFound = @($laneCandidates | ForEach-Object { "$($_.publishedAt) | $($_.title)" }) -join "`n"
+                $retryContext = if ($alreadyFound) {
+                    @"
+
+This is pass $pass. The prior pass found the items below. Do not repeat them; search different query formulations, organizations and source types to fill gaps:
+$alreadyFound
+"@
+                } else { "" }
+                $requestBody.input = "$prompt`n`nAssigned discovery lane: $($lane.name)`nLane focus: $($lane.focus)$retryContext"
+                Write-Host "Scanning breaking events - lane $($laneIndex + 1) of $($discoveryLanes.Count), pass $pass`: $($lane.name)..." -ForegroundColor Cyan
+                $response = Invoke-RestMethod `
+                    -Method Post `
+                    -Uri "https://api.x.ai/v1/responses" `
+                    -Headers @{ Authorization = "Bearer $apiKey" } `
+                    -ContentType "application/json" `
+                    -Body ($requestBody | ConvertTo-Json -Depth 30 -Compress) `
+                    -TimeoutSec 420
+
+                $message = @($response.output | Where-Object { $_.type -eq "message" }) | Select-Object -Last 1
+                $textBlock = @($message.content | Where-Object { $_.type -eq "output_text" }) | Select-Object -First 1
+                if (-not $textBlock.text) { throw "xAI returned no structured results for the $($lane.name) lane." }
+                try {
+                    $laneResult = $textBlock.text | ConvertFrom-Json
+                }
+                catch {
+                    throw "xAI returned invalid event JSON for the $($lane.name) lane."
+                }
+
+                $laneCandidates += @($laneResult.candidates)
+                $laneCandidates = @($laneCandidates |
+                    Group-Object {
+                        if ($_.primarySourceUrl) { ([string]$_.primarySourceUrl).TrimEnd('/').ToLowerInvariant() }
+                        else { ([string]$_.eventKey).Trim().ToLowerInvariant() }
+                    } |
+                    ForEach-Object { $_.Group | Select-Object -First 1 })
+                if ($laneCandidates.Count -ge $MinimumCandidatesPerLane) { break }
+            }
+            foreach ($candidate in $laneCandidates) {
+                $candidate | Add-Member -NotePropertyName discoveryLane -NotePropertyValue $lane.name -Force
+            }
+            $allCandidates += $laneCandidates
+            $laneAudit += [pscustomobject]@{
+                lane = $lane.name
+                candidateCount = $laneCandidates.Count
+                passes = $lanePasses
+            }
+        }
+
+        $candidateHeadlines = @($allCandidates | ForEach-Object {
+            "$($_.publishedAt) | $($_.title) | $($_.primarySourceUrl)"
+        } | Select-Object -First 60) -join "`n"
+        $gapAuditName = "Cross-lane breaking gap audit"
+        $requestBody.input = @"
+$prompt
+
+This is a final cross-lane gap audit, not another topical lane. The preceding scans found the candidate list below:
+$candidateHeadlines
+
+Search the current 24-hour window again across unrestricted X, official press releases, financial wires, filings, model repositories and lab newsrooms. Use broad X discussion as a gap-finding surface: search "announces", "released", "weights", "today", "earnings", "MW", "GW", "investment" and comparable semantic variants, then verify against primary sources. Return only material events missing from the supplied list. Pay particular attention to same-day model or weights releases, major lab investments, earnings disclosures, multi-hundred-megawatt or billion-dollar infrastructure commitments, semiconductor supply agreements and coordinated policy announcements. Do not repeat an event already represented above.
+"@
+        Write-Host "Scanning breaking events - final cross-lane gap audit..." -ForegroundColor Cyan
+        $gapResponse = Invoke-RestMethod `
             -Method Post `
             -Uri "https://api.x.ai/v1/responses" `
             -Headers @{ Authorization = "Bearer $apiKey" } `
             -ContentType "application/json" `
             -Body ($requestBody | ConvertTo-Json -Depth 30 -Compress) `
             -TimeoutSec 420
+        $gapMessage = @($gapResponse.output | Where-Object { $_.type -eq "message" }) | Select-Object -Last 1
+        $gapTextBlock = @($gapMessage.content | Where-Object { $_.type -eq "output_text" }) | Select-Object -First 1
+        if (-not $gapTextBlock.text) { throw "xAI returned no structured results for the cross-lane gap audit." }
+        try {
+            $gapResult = $gapTextBlock.text | ConvertFrom-Json
+        }
+        catch {
+            throw "xAI returned invalid event JSON for the cross-lane gap audit."
+        }
+        $gapCandidates = @($gapResult.candidates)
+        foreach ($candidate in $gapCandidates) {
+            $candidate | Add-Member -NotePropertyName discoveryLane -NotePropertyValue $gapAuditName -Force
+        }
+        $allCandidates += $gapCandidates
+        $laneAudit += [pscustomobject]@{
+            lane = $gapAuditName
+            candidateCount = $gapCandidates.Count
+        }
     }
     catch {
         $status = $_.Exception.Response.StatusCode.value__ 2>$null
@@ -177,15 +324,10 @@ else {
         Remove-Variable apiKey -ErrorAction SilentlyContinue
     }
 
-    $message = @($response.output | Where-Object { $_.type -eq "message" }) | Select-Object -Last 1
-    $textBlock = @($message.content | Where-Object { $_.type -eq "output_text" }) | Select-Object -First 1
-    if (-not $textBlock.text) { throw "xAI returned no structured breaking-event results." }
-
-    try {
-        $result = $textBlock.text | ConvertFrom-Json
-    }
-    catch {
-        throw "xAI returned invalid breaking-event JSON. No output file was changed."
+    $result = [pscustomobject]@{
+        generatedAt = $nowUtc.ToString("o")
+        lanes = $laneAudit
+        candidates = $allCandidates
     }
     [IO.File]::WriteAllText($candidatesPath, ($result | ConvertTo-Json -Depth 20), $utf8)
 }
@@ -206,6 +348,63 @@ function Get-ValidHttpsUrls {
         } catch {}
     }
     return @($valid)
+}
+
+function Get-TitleTokens {
+    param([string]$Title)
+    $stopWords = @{
+        "the"=$true; "and"=$true; "for"=$true; "with"=$true; "from"=$true; "that"=$true; "this"=$true;
+        "into"=$true; "over"=$true; "after"=$true; "about"=$true; "new"=$true; "its"=$true; "are"=$true;
+        "how"=$true; "what"=$true; "why"=$true; "announce"=$true; "announces"=$true; "ai"=$true
+    }
+    $normalized = [regex]::Replace(([string]$Title).ToLowerInvariant(), '[^a-z0-9]+', ' ')
+    return @($normalized.Split(' ', [StringSplitOptions]::RemoveEmptyEntries) |
+        Where-Object { $_.Length -ge 3 -and -not $stopWords.ContainsKey($_) } |
+        Select-Object -Unique)
+}
+
+function Get-TitleSimilarity {
+    param([string]$Left, [string]$Right)
+    $leftTokens = @(Get-TitleTokens $Left)
+    $rightTokens = @(Get-TitleTokens $Right)
+    if ($leftTokens.Count -lt 3 -or $rightTokens.Count -lt 3) { return 0 }
+    $rightSet = @{}; foreach ($token in $rightTokens) { $rightSet[$token] = $true }
+    $intersection = @($leftTokens | Where-Object { $rightSet.ContainsKey($_) }).Count
+    $union = @($leftTokens + $rightTokens | Select-Object -Unique).Count
+    if ($union -eq 0) { return 0 }
+    return [double]$intersection / [double]$union
+}
+
+function Test-SameEvent {
+    param($Left, $Right)
+    $leftKey = ([string]$Left.eventKey).Trim().ToLowerInvariant()
+    $rightKey = ([string]$Right.eventKey).Trim().ToLowerInvariant()
+    if ($leftKey -and $rightKey -and $leftKey -eq $rightKey) { return $true }
+
+    $leftUrl = ([string]$Left.url).TrimEnd('/').ToLowerInvariant()
+    $rightUrl = ([string]$Right.url).TrimEnd('/').ToLowerInvariant()
+    if ($leftUrl -and $rightUrl -and $leftUrl -eq $rightUrl) { return $true }
+
+    try {
+        $hoursApart = [Math]::Abs((([datetime]$Left.publishedAt) - ([datetime]$Right.publishedAt)).TotalHours)
+        if ($hoursApart -gt 96) { return $false }
+    } catch { return $false }
+
+    $similarity = Get-TitleSimilarity ([string]$Left.title) ([string]$Right.title)
+    if ($similarity -ge 0.50) { return $true }
+
+    $leftEntities = @($Left.entities | ForEach-Object {
+        [regex]::Replace(([string]$_).ToLowerInvariant(), '[^a-z0-9]+', '')
+    } | Where-Object { $_.Length -ge 3 } | Select-Object -Unique)
+    $rightEntitySet = @{}
+    foreach ($entity in @($Right.entities)) {
+        $token = [regex]::Replace(([string]$entity).ToLowerInvariant(), '[^a-z0-9]+', '')
+        if ($token.Length -ge 3) { $rightEntitySet[$token] = $true }
+    }
+    $entityOverlap = @($leftEntities | Where-Object { $rightEntitySet.ContainsKey($_) }).Count
+    $sameType = $Left.eventType -and $Right.eventType -and
+        ([string]$Left.eventType).ToLowerInvariant() -eq ([string]$Right.eventType).ToLowerInvariant()
+    return $sameType -and $entityOverlap -gt 0 -and $similarity -ge 0.25
 }
 
 $accepted = @()
@@ -310,14 +509,52 @@ foreach ($item in @($result.candidates)) {
         discoveryWindowHours = [int]$item.discoveryWindowHours
         isBreaking = [bool]$item.isBreaking
         mustInclude = [bool]$item.mustInclude
+        discoveryLane = if ($item.PSObject.Properties["discoveryLane"]) { [string]$item.discoveryLane } else { "" }
         url = $primaryUrl
     }
 }
 
-$accepted = @($accepted |
-    Group-Object { if ($_.eventKey) { $_.eventKey.ToLowerInvariant() } else { $_.url.ToLowerInvariant() } } |
-    ForEach-Object { $_.Group | Sort-Object @{ Expression = "mustInclude"; Descending = $true }, score -Descending | Select-Object -First 1 } |
-    Sort-Object @{ Expression = "mustInclude"; Descending = $true }, @{ Expression = "isBreaking"; Descending = $true }, @{ Expression = "score"; Descending = $true } |
+foreach ($previous in $previousSignals) {
+    try {
+        $previousPublishedUtc = ([datetime]$previous.publishedAt).ToUniversalTime()
+        $previousAgeHours = ($nowUtc - $previousPublishedUtc).TotalHours
+        $dateOnlyTimestamp = $previousPublishedUtc.TimeOfDay.TotalMinutes -eq 0
+        $maximumAge = if ($dateOnlyTimestamp) { $FallbackLookbackHours + 24 } else { $FallbackLookbackHours + 8 }
+        if ($previousAgeHours -ge -2 -and $previousAgeHours -le $maximumAge) {
+            $accepted += $previous
+        }
+    } catch {}
+}
+
+$acceptedByQuality = @($accepted | Sort-Object `
+    @{ Expression = { [int]$_.score }; Descending = $true }, `
+    @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
+    @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true })
+
+$deduplicatedAccepted = @()
+foreach ($candidate in $acceptedByQuality) {
+    $duplicate = $false
+    foreach ($existing in $deduplicatedAccepted) {
+        if (Test-SameEvent $candidate $existing) {
+            $duplicate = $true
+            break
+        }
+    }
+    if (-not $duplicate) { $deduplicatedAccepted += $candidate }
+}
+
+$historyFeed = [ordered]@{
+    generatedAt = $nowUtc.ToString("o")
+    retentionHours = $FallbackLookbackHours + 24
+    signals = $deduplicatedAccepted
+}
+[IO.File]::WriteAllText($historyPath, ($historyFeed | ConvertTo-Json -Depth 20), $utf8)
+
+$accepted = @($deduplicatedAccepted |
+    Sort-Object `
+        @{ Expression = { [int]$_.score }; Descending = $true }, `
+        @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
+        @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true } |
     Select-Object -First $MaxEvents)
 
 [IO.File]::WriteAllText((Join-Path $diagnosticDirectory "breaking-rejections.json"), ($rejected | ConvertTo-Json -Depth 10), $utf8)
@@ -327,6 +564,7 @@ $feed = [ordered]@{
     source = "Broad AI event discovery"
     primaryLookbackHours = $PrimaryLookbackHours
     fallbackLookbackHours = $FallbackLookbackHours
+    discoveryLanes = @($result.lanes)
     signals = $accepted
 }
 [IO.File]::WriteAllText($outputPath, ($feed | ConvertTo-Json -Depth 20), $utf8)
