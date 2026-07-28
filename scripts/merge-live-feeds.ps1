@@ -140,8 +140,8 @@ $allSignals = @($allSignals | Where-Object { -not ($_.eventType -eq "other" -and
 if ($allSignals.Count -eq 0) { throw "No live signals cleared the event classification policy." }
 
 $rankedSignals = @($allSignals | Sort-Object `
-    @{ Expression = { [int]$_.score }; Descending = $true }, `
     @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
+    @{ Expression = { [int]$_.score }; Descending = $true }, `
     @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true }, `
     @{ Expression = { if ([bool]$_.mustInclude) { 1 } else { 0 } }; Descending = $true })
 

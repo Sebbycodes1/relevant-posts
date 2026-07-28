@@ -7,7 +7,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
-if (-not $TemplatePath) { $TemplatePath = Join-Path $projectRoot "outputs\signal-desk-offline.html" }
+if (-not $TemplatePath) {
+    $publishedTemplatePath = Join-Path $projectRoot "docs\index.html"
+    $offlineTemplatePath = Join-Path $projectRoot "outputs\signal-desk-offline.html"
+    $TemplatePath = if (Test-Path -LiteralPath $publishedTemplatePath) { $publishedTemplatePath } else { $offlineTemplatePath }
+}
 if (-not $FeedPath) { $FeedPath = Join-Path $projectRoot "outputs\live-x-feed.json" }
 if (-not $OutputPath) { $OutputPath = Join-Path $projectRoot "outputs\signal-desk-live.html" }
 
@@ -75,6 +79,10 @@ $updated = [regex]::Replace($updated, '<div class="eyebrow">Tuesday intelligence
 $updated = [regex]::Replace($updated, '<span id="feedMode">[^<]*</span>', "<span id=`"feedMode`">$snapshotLabel - sources refreshed $sourceUpdatedLocal</span>", 1)
 $updated = [regex]::Replace($updated, 'mode: "Illustrative data[^\"]*"', "mode: `"$snapshotLabel - sources refreshed $sourceUpdatedLocal`"", 1)
 $updated = [regex]::Replace($updated, '<p>These sources are configured as a starting watchlist\.[^<]*</p>', '<p>This standalone edition includes the latest locally collected X and newsletter/RSS results that cleared the scoring workflow.</p>', 1)
+$updated = $updated.Replace(
+    'This shared prototype is a read-only snapshot. Feedback stays in this browser; source refreshes are generated separately.',
+    'The dashboard file and your feedback stay on this device. A refresh sends only public-source text to the configured xAI service for scoring.'
+)
 
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($OutputPath, $updated, $utf8)
