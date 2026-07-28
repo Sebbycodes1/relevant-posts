@@ -4,11 +4,17 @@ Relevant Posts is a locally refreshed AI intelligence feed for asset-management 
 
 ## Use the prototype
 
-1. Double-click `outputs\refresh-relevant-posts.cmd`.
-2. Wait for the source passes and quality checks to finish.
-3. The current dashboard opens automatically as `outputs\signal-desk-live.html`.
+### Refresh and publish
 
-The refresh is manual by design for the prototype, keeping xAI usage predictable. The last successful result from an individual source lane is retained if another lane fails.
+1. Double-click `refresh-and-publish.cmd` in the project folder.
+2. Leave the window open while the source passes and quality checks run. A full refresh usually takes 30–45 minutes.
+3. If every source lane succeeds, the workflow updates the shared GitHub Pages dashboard automatically.
+
+The public page is never changed after a partial or failed refresh. The command requires the local xAI key to be configured and this repository to be signed in to GitHub.
+
+For a local-only update, double-click `outputs\refresh-relevant-posts.cmd`. The resulting dashboard opens as `outputs\signal-desk-live.html` without changing the shared link.
+
+The refresh is manual by design for the prototype, keeping xAI usage predictable. The last successful result from an individual source lane is retained if another lane fails. The latest run status is saved to `work\last-refresh-status.json`.
 
 ## What the refresh does
 

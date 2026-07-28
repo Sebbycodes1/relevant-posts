@@ -353,6 +353,21 @@ $finalSignals = @($validSignals |
     Sort-Object score -Descending |
     Select-Object -First $MaxSignals)
 
+if ($finalSignals.Count -eq 0) {
+    if (Test-Path -LiteralPath $outputPath) {
+        try {
+            $previousFeed = [IO.File]::ReadAllText($outputPath) | ConvertFrom-Json
+            if (@($previousFeed.signals).Count -gt 0) {
+                throw "No new curated X posts cleared the screen. The last successful X snapshot was retained and this lane was marked incomplete."
+            }
+        }
+        catch {
+            if ($_.Exception.Message -like "No new curated X posts*") { throw }
+        }
+    }
+    throw "No curated X posts cleared the screen and no earlier successful X snapshot is available."
+}
+
 $finalFeed = [ordered]@{
     generatedAt = (Get-Date).ToUniversalTime().ToString("o")
     source = "xAI X Search"

@@ -77,7 +77,16 @@ $updated = [regex]::Replace($updated, '<title>Relevant Posts[^<]*</title>', '<ti
 $updated = $updated.Replace('<span class="offline-pill">Offline prototype</span>', '<span class="offline-pill">Live snapshot</span>')
 $updated = [regex]::Replace($updated, '<div class="eyebrow">Tuesday intelligence brief[^<]*</div>', "<div class=`"eyebrow`">$snapshotLabel</div>", 1)
 $updated = [regex]::Replace($updated, '<span id="feedMode">[^<]*</span>', "<span id=`"feedMode`">$snapshotLabel - sources refreshed $sourceUpdatedLocal</span>", 1)
-$updated = [regex]::Replace($updated, 'mode: "Illustrative data[^\"]*"', "mode: `"$snapshotLabel - sources refreshed $sourceUpdatedLocal`"", 1)
+$modeLabel = "$snapshotLabel - sources refreshed $sourceUpdatedLocal"
+$updated = [regex]::Replace(
+    $updated,
+    '(?s)(const state\s*=\s*\{.*?\bmode:\s*)"[^"]*"',
+    [Text.RegularExpressions.MatchEvaluator]{
+        param($match)
+        return $match.Groups[1].Value + '"' + $modeLabel.Replace('\', '\\').Replace('"', '\"') + '"'
+    },
+    1
+)
 $updated = [regex]::Replace($updated, '<p>These sources are configured as a starting watchlist\.[^<]*</p>', '<p>This standalone edition includes the latest locally collected X and newsletter/RSS results that cleared the scoring workflow.</p>', 1)
 $updated = $updated.Replace(
     'This shared prototype is a read-only snapshot. Feedback stays in this browser; source refreshes are generated separately.',

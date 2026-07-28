@@ -332,6 +332,10 @@ Search the current 24-hour window again across unrestricted X, official press re
     [IO.File]::WriteAllText($candidatesPath, ($result | ConvertTo-Json -Depth 20), $utf8)
 }
 
+if (@($result.candidates).Count -eq 0) {
+    throw "The broad event scan returned no candidates. The previous verified-event snapshot was retained and this lane was marked incomplete."
+}
+
 function Get-ValidHttpsUrls {
     param($Urls, [string]$PrimaryUrl)
     $seen = @{}
@@ -512,6 +516,11 @@ foreach ($item in @($result.candidates)) {
         discoveryLane = if ($item.PSObject.Properties["discoveryLane"]) { [string]$item.discoveryLane } else { "" }
         url = $primaryUrl
     }
+}
+
+$newAcceptedCount = $accepted.Count
+if ($newAcceptedCount -eq 0) {
+    throw "The broad event scan produced no newly verified events. The previous verified-event snapshot was retained and this lane was marked incomplete."
 }
 
 foreach ($previous in $previousSignals) {

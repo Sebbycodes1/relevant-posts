@@ -537,6 +537,11 @@ $selected = @($accepted |
     } |
     Sort-Object @{ Expression = { [int]$_.commentaryScore }; Descending = $true })
 
+$totalCommentaryCandidates = @($candidateEvents | ForEach-Object { @($_.candidates) }).Count
+if ($events.Count -gt 0 -and $totalCommentaryCandidates -eq 0) {
+    throw "Commentary discovery returned no candidates for any verified event. The previous commentary snapshot was retained and this lane was marked incomplete."
+}
+
 $previousAcceptedUrlsByHandle = @{}
 if (Test-Path -LiteralPath $outputPath) {
     try {

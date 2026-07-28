@@ -18,8 +18,15 @@ if (-not $OutputPath) { $OutputPath = Join-Path $projectRoot "outputs\live-combi
 function Repair-DisplayText {
     param([string]$Text)
     if (-not $Text) { return $Text }
-    if ($Text.IndexOf([char]0x00C3) -ge 0 -or $Text.IndexOf([char]0x00C2) -ge 0 -or $Text.IndexOf([char]0x00E2) -ge 0) {
-        try { return [Text.Encoding]::UTF8.GetString([Text.Encoding]::GetEncoding(28591).GetBytes($Text)) } catch {}
+    $hasEncodingMarkers = $Text.IndexOf([char]0x00C3) -ge 0 -or
+        $Text.IndexOf([char]0x00C2) -ge 0 -or
+        $Text.IndexOf([char]0x00E2) -ge 0 -or
+        [regex]::IsMatch($Text, '[\u0080-\u009f]')
+    if ($hasEncodingMarkers) {
+        try {
+            $repaired = [Text.Encoding]::UTF8.GetString([Text.Encoding]::GetEncoding(28591).GetBytes($Text))
+            if (-not $repaired.Contains([char]0xfffd)) { return $repaired }
+        } catch {}
     }
     return $Text
 }

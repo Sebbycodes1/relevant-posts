@@ -216,14 +216,26 @@ const sources = [
 
 const sectorOptions = ["All", "Labs", "Memory", "Chips", "Semis", "Energy", "Hyperscalers", "Hardware", "Software", "Policy"];
 
+function readStoredIds(key: string): number[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(key) || "[]");
+    return Array.isArray(value)
+      ? value.filter((item): item is number => typeof item === "number" && Number.isFinite(item))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function Home() {
   const [sector, setSector] = useState("All");
   const [platform, setPlatform] = useState<"All" | Platform>("All");
   const [query, setQuery] = useState("");
   const [activeView, setActiveView] = useState<"feed" | "sources" | "rubric">("feed");
-  const [saved, setSaved] = useState<number[]>([]);
-  const [dismissed, setDismissed] = useState<number[]>([]);
-  const [useful, setUseful] = useState<number[]>([]);
+  const [saved, setSaved] = useState<number[]>(() => readStoredIds("signal-saved"));
+  const [dismissed, setDismissed] = useState<number[]>(() => readStoredIds("signal-dismissed"));
+  const [useful, setUseful] = useState<number[]>(() => readStoredIds("signal-useful"));
   const [expanded, setExpanded] = useState<number | null>(1);
   const [refreshed, setRefreshed] = useState("6:30 AM ET");
   const [feedSignals, setFeedSignals] = useState<Signal[]>(demoSignals);
@@ -247,15 +259,16 @@ export default function Home() {
   };
 
   useEffect(() => {
-    const read = (key: string) => JSON.parse(localStorage.getItem(key) || "[]");
-    setSaved(read("signal-saved"));
-    setDismissed(read("signal-dismissed"));
-    setUseful(read("signal-useful"));
-    void refreshFeed();
+    const refreshTimer = window.setTimeout(() => {
+      void refreshFeed();
+    }, 0);
+    return () => window.clearTimeout(refreshTimer);
   }, []);
 
   const persist = (key: string, value: number[]) => {
-    localStorage.setItem(key, JSON.stringify(value));
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    }
     return value;
   };
 
