@@ -15,6 +15,12 @@ param(
     [ValidateRange(1, 2)]
     [int]$MaxDiscoveryPasses = 2,
 
+    [ValidateRange(55, 100)]
+    [int]$MinimumEventScore = 70,
+
+    [ValidateRange(0, 60)]
+    [int]$CommentaryEventLimit = 30,
+
     [string]$Model = "grok-4.5",
 
     [switch]$ReplayCandidates
@@ -46,10 +52,20 @@ if (-not (Test-Path -LiteralPath $eventFeedPath)) {
 $eventFeed = [IO.File]::ReadAllText($eventFeedPath) | ConvertFrom-Json
 $events = @($eventFeed.signals | Where-Object {
     try {
-        ($nowUtc - ([datetime]$_.publishedAt).ToUniversalTime()).TotalDays -le $LookbackDays
+        $ageDays = ($nowUtc - ([datetime]$_.publishedAt).ToUniversalTime()).TotalDays
+        $ageDays -le $LookbackDays -and [bool]$_.mustInclude -and (
+            [int]$_.score -ge $MinimumEventScore -or [bool]$_.isBreaking
+        )
     }
     catch { $false }
-} | Select-Object eventKey, title, summary, entities, eventType, publishedAt, url, source, evidenceSummary)
+} | Sort-Object `
+    @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
+    @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true }, `
+    @{ Expression = { [int]$_.score }; Descending = $true } |
+    Select-Object eventKey, title, summary, entities, eventType, publishedAt, url, source, evidenceSummary, score, isBreaking)
+if ($CommentaryEventLimit -gt 0) {
+    $events = @($events | Select-Object -First $CommentaryEventLimit)
+}
 
 if ($events.Count -eq 0) {
     $emptyFeed = [ordered]@{
@@ -135,7 +151,7 @@ if (Test-Path -LiteralPath $sourcePerformancePath) {
         $sourcePerformanceData = [IO.File]::ReadAllText($sourcePerformancePath) | ConvertFrom-Json
         $sourcePerformance = @($sourcePerformanceData)
         $preferredHandles += @($sourcePerformance | Where-Object {
-            [int]$_.acceptedCount -ge 2 -and [double]$_.averageScore -ge 72
+            [int]$_.acceptedCount -ge 3 -and [double]$_.averageScore -ge 75
         } | ForEach-Object { $_.handle })
     } catch {}
 }
@@ -463,7 +479,7 @@ foreach ($candidateEvent in $candidateEvents) {
         $sourceScore = [int]$sourcePoints[$familiarity]
         $independenceScore = if ($independencePoints.ContainsKey([string]$grade.independenceQuality)) { [int]$independencePoints[[string]$grade.independenceQuality] } else { 0 }
         $score = $analyticalScore + $evidenceScore + $sourceScore + $independenceScore + $recencyScore
-        $scoreCap = if ($familiarity -eq "preferred") { 89 } elseif ($familiarity -eq "established_new") { 87 } else { 84 }
+        $scoreCap = if ($familiarity -eq "preferred") { 89 } elseif ($familiarity -eq "established_new") { 87 } else { 78 }
         $score = [Math]::Min($scoreCap, $score)
 
         if ([string]$grade.directRelevance -ne "direct") { $reasons += "Not directly relevant to the verified event." }
@@ -473,6 +489,19 @@ foreach ($candidateEvent in $candidateEvents) {
         if ([bool]$grade.isRepetition -or [string]$grade.analysisType -eq "repetition") { $reasons += "Repeats the announcement without useful analysis." }
         if ([bool]$grade.appearsGenerated) { $reasons += "Appears to be a generated roundup." }
         if ([string]$grade.analyticalValue -in @("none", "low")) { $reasons += "Insufficient incremental analytical value." }
+        if ($familiarity -eq "unknown") {
+            if (-not [bool]$grade.addsNewFacts) { $reasons += "Unfamiliar source does not add a new verifiable fact." }
+            if (-not [bool]$grade.hasDirectEvidenceLinks -or @($candidate.evidenceUrls).Count -eq 0) {
+                $reasons += "Unfamiliar source lacks a direct evidence link."
+            }
+            if ([string]$grade.evidenceQuality -notin @("specific", "strong")) {
+                $reasons += "Unfamiliar source lacks sufficiently specific evidence."
+            }
+            if ([string]$grade.independenceQuality -eq "none") {
+                $reasons += "Unfamiliar source lacks independent analytical value."
+            }
+            if ($score -lt 74) { $reasons += "Unfamiliar source requires a score of at least 74." }
+        }
         if ($score -lt $MinimumCommentaryScore) { $reasons += "Below the deterministic $MinimumCommentaryScore-point threshold." }
 
         if ($reasons.Count) {

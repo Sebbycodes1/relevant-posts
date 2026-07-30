@@ -12,6 +12,8 @@ param(
     [ValidateRange(1, 30)]
     [int]$SubstackLookbackDays = 7,
 
+    [switch]$CatchUp,
+
     [switch]$Publish,
 
     [switch]$SkipOpen
@@ -40,6 +42,7 @@ function Write-RefreshStatus {
         completedAt = (Get-Date).ToUniversalTime().ToString("o")
         published = $Published
         publishMessage = $PublishMessage
+        profile = if ($CatchUp) { "catch_up" } else { "full" }
         failures = $failures
         lanes = $laneResults
     }
@@ -50,7 +53,8 @@ function Write-RefreshStatus {
 Write-Host "Refreshing Relevant Posts..." -ForegroundColor Cyan
 
 try {
-    & (Join-Path $PSScriptRoot "fetch-breaking-events.ps1") -PrimaryLookbackHours $BreakingLookbackHours -FallbackLookbackHours $BreakingFallbackHours -MaxEvents 12
+    $breakingPasses = if ($CatchUp) { 1 } else { 2 }
+    & (Join-Path $PSScriptRoot "fetch-breaking-events.ps1") -PrimaryLookbackHours $BreakingLookbackHours -FallbackLookbackHours $BreakingFallbackHours -MaxEvents 0 -MaxDiscoveryPasses $breakingPasses
     if (-not $?) { throw "Breaking-event discovery did not complete." }
     $laneResults += [ordered]@{ lane = "Breaking events"; status = "success"; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
 }
@@ -60,30 +64,36 @@ catch {
     Write-Warning "The broad event scan failed; the other sources will still refresh."
 }
 
-try {
-    & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours $XLookbackHours -MaxSignals 20
-    if (-not $?) { throw "X collection did not complete." }
-    $laneResults += [ordered]@{ lane = "X"; status = "success"; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
+if ($CatchUp) {
+    $laneResults += [ordered]@{ lane = "X"; status = "retained"; message = "Using the morning X account scan."; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
+    $laneResults += [ordered]@{ lane = "Newsletters / RSS"; status = "retained"; message = "Using the morning newsletter/RSS scan."; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
 }
-catch {
-    $failures += "X: $($_.Exception.Message)"
-    $laneResults += [ordered]@{ lane = "X"; status = "failed"; message = $_.Exception.Message; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
-    Write-Warning "The X refresh failed; the last successful X snapshot will be retained."
+else {
+    try {
+        & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours $XLookbackHours -MaxSignals 20
+        if (-not $?) { throw "X collection did not complete." }
+        $laneResults += [ordered]@{ lane = "X"; status = "success"; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
+    }
+    catch {
+        $failures += "X: $($_.Exception.Message)"
+        $laneResults += [ordered]@{ lane = "X"; status = "failed"; message = $_.Exception.Message; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
+        Write-Warning "The X refresh failed; the last successful X snapshot will be retained."
+    }
+
+    try {
+        & (Join-Path $PSScriptRoot "fetch-substack.ps1") -LimitPerSource 2 -LookbackDays $SubstackLookbackDays
+        if (-not $?) { throw "Newsletter/RSS collection did not complete." }
+        $laneResults += [ordered]@{ lane = "Newsletters / RSS"; status = "success"; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
+    }
+    catch {
+        $failures += "Newsletters/RSS: $($_.Exception.Message)"
+        $laneResults += [ordered]@{ lane = "Newsletters / RSS"; status = "failed"; message = $_.Exception.Message; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
+        Write-Warning "The newsletter/RSS refresh failed; the last successful snapshot will be retained."
+    }
 }
 
 try {
-    & (Join-Path $PSScriptRoot "fetch-substack.ps1") -LimitPerSource 2 -LookbackDays $SubstackLookbackDays
-    if (-not $?) { throw "Newsletter/RSS collection did not complete." }
-    $laneResults += [ordered]@{ lane = "Newsletters / RSS"; status = "success"; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
-}
-catch {
-    $failures += "Newsletters/RSS: $($_.Exception.Message)"
-    $laneResults += [ordered]@{ lane = "Newsletters / RSS"; status = "failed"; message = $_.Exception.Message; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
-    Write-Warning "The newsletter/RSS refresh failed; the last successful snapshot will be retained."
-}
-
-try {
-    & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -LookbackDays 7 -CandidatesPerEvent 10 -MinimumCandidatesPerEvent 5 -MaxDiscoveryPasses 2
+    & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 70 -CommentaryEventLimit 30 -LookbackDays 7 -CandidatesPerEvent 10 -MinimumCandidatesPerEvent 5 -MaxDiscoveryPasses 2
     if (-not $?) { throw "Commentary enrichment did not complete." }
     $laneResults += [ordered]@{ lane = "Event commentary"; status = "success"; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
 }

@@ -86,6 +86,38 @@ function Get-PrimaryEntityKey {
     return ([string]$Item.source).Trim().ToLowerInvariant()
 }
 
+function Get-SourceKey {
+    param($Item)
+    $source = ([string]$Item.source).ToLowerInvariant()
+    $source = [regex]::Replace($source, '(?i)\b(newsletter|substack|official|newsroom|investor relations|ir)\b', ' ')
+    return [regex]::Replace($source, '[^a-z0-9]+', '')
+}
+
+function Get-FreshnessPriority {
+    param($Item)
+    try {
+        $publishedUtc = ([datetime]$Item.publishedAt).ToUniversalTime()
+        if ([bool]$Item.mustInclude) {
+            if ($publishedUtc.TimeOfDay.TotalMinutes -eq 0) {
+                $calendarDays = ($nowUtc.Date - $publishedUtc.Date).Days
+                if ($calendarDays -le 0) { return 3 }
+                if ($calendarDays -eq 1) { return 2 }
+                if ($calendarDays -le 3) { return 1 }
+                return 0
+            }
+            $ageHours = ($nowUtc - $publishedUtc).TotalHours
+            if ($ageHours -le 24) { return 3 }
+            if ($ageHours -le 48) { return 2 }
+            if ($ageHours -le 72) { return 1 }
+            return 0
+        }
+        $ageHours = ($nowUtc - $publishedUtc).TotalHours
+        if ([int]$Item.score -ge 70 -and $ageHours -le 24) { return 2 }
+        if ([int]$Item.score -ge 70 -and $ageHours -le 48) { return 1 }
+    } catch {}
+    return 0
+}
+
 function Set-ObjectProperty {
     param($Item, [string]$Name, $Value)
     if ($Item.PSObject.Properties[$Name]) {
@@ -164,7 +196,7 @@ foreach ($item in $allSignals) {
     try {
         $eventPublishedUtc = ([datetime]$item.publishedAt).ToUniversalTime()
         $eventAgeHours = ($nowUtc - $eventPublishedUtc).TotalHours
-        Set-ObjectProperty $item "isBreaking" ($eventAgeHours -ge 0 -and $eventAgeHours -le 24)
+        Set-ObjectProperty $item "isBreaking" ($eventAgeHours -ge 0 -and $eventAgeHours -le 24 -and [int]$item.score -ge 80)
         Set-ObjectProperty $item "discoveryWindowHours" $(if ($eventAgeHours -le 24) { 24 } else { 72 })
     }
     catch {
@@ -174,6 +206,7 @@ foreach ($item in $allSignals) {
 
 $rankedSignals = @($allSignals | Sort-Object `
     @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
+    @{ Expression = { Get-FreshnessPriority $_ }; Descending = $true }, `
     @{ Expression = { [int]$_.score }; Descending = $true }, `
     @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true }, `
     @{ Expression = { if ([bool]$_.mustInclude) { 1 } else { 0 } }; Descending = $true })
@@ -197,6 +230,7 @@ foreach ($item in $rankedSignals) {
                 $hoursApart = [Math]::Abs((([datetime]$item.publishedAt) - ([datetime]$existing.publishedAt)).TotalHours)
                 $similarity = Get-TitleSimilarity ([string]$item.title) ([string]$existing.title)
                 $samePublisher = ([string]$item.source).Trim().ToLowerInvariant() -eq ([string]$existing.source).Trim().ToLowerInvariant()
+                $sameCanonicalPublisher = (Get-SourceKey $item) -and (Get-SourceKey $item) -eq (Get-SourceKey $existing)
                 $sameEventType = $item.eventType -and $existing.eventType -and ([string]$item.eventType).ToLowerInvariant() -eq ([string]$existing.eventType).ToLowerInvariant()
                 $itemEntities = @(Get-EntityTokens $item.entities)
                 $existingEntities = @(Get-EntityTokens $existing.entities)
@@ -209,6 +243,7 @@ foreach ($item in $rankedSignals) {
                 $nearSameEvent = $hoursApart -le 96 -and (
                     $similarity -ge 0.58 -or
                     ($samePublisher -and $similarity -ge 0.42) -or
+                    ($sameCanonicalPublisher -and $hoursApart -le 24 -and $titleOverlap -ge 3) -or
                     ($sameEventType -and $entityOverlap -gt 0 -and ($similarity -ge 0.20 -or ($similarity -ge 0.15 -and $titleOverlap -ge 2)))
                 )
             } catch {}
@@ -230,7 +265,7 @@ foreach ($item in $rankedSignals) {
         continue
     }
 
-    foreach ($field in @("title", "summary", "implication")) {
+    foreach ($field in @("source", "handle", "title", "summary", "implication", "whyNow", "evidenceSummary")) {
         $item.$field = Repair-DisplayText ([string]$item.$field)
     }
     if (-not $item.PSObject.Properties["relatedSources"]) { $item | Add-Member -NotePropertyName relatedSources -NotePropertyValue @([string]$item.source) }
@@ -263,6 +298,8 @@ foreach ($item in $merged) {
     Set-ObjectProperty $item "commentaryIncrementalValue" (Repair-DisplayText ([string]$commentary.incrementalValue))
     Set-ObjectProperty $item "commentaryAnalysisType" ([string]$commentary.analysisType)
     Set-ObjectProperty $item "commentaryScore" ([int]$commentary.commentaryScore)
+    Set-ObjectProperty $item "commentarySourceFamiliarity" ([string]$commentary.sourceFamiliarity)
+    Set-ObjectProperty $item "commentaryHasDirectEvidenceLinks" ([bool]$commentary.hasDirectEvidenceLinks)
     Set-ObjectProperty $item "commentarySource" (Repair-DisplayText ([string]$commentary.source))
     Set-ObjectProperty $item "commentaryHandle" ([string]$commentary.handle)
     Set-ObjectProperty $item "commentaryPlatform" ([string]$commentary.platform)
@@ -303,6 +340,12 @@ if ($frontPage.Count -lt $frontPageLimit) {
 }
 $merged = @($frontPage + $deferred)
 
+$qualifiedSignalCount = $merged.Count
+$presentationSignalLimit = 30
+if ($merged.Count -gt $presentationSignalLimit) {
+    $merged = @($merged | Select-Object -First $presentationSignalLimit)
+}
+
 $sourceDates = @($sourceFeeds | ForEach-Object {
     try { ([datetime]$_.generatedAt).ToUniversalTime() } catch {}
 } | Where-Object { $_ })
@@ -319,6 +362,8 @@ $combined = [ordered]@{
     oldestSourceAt = $oldestSourceAt
     newestPublishedAt = $newestPublishedAt
     staleAfterHours = 36
+    qualifiedSignalCount = $qualifiedSignalCount
+    presentationSignalLimit = $presentationSignalLimit
     source = ($sources -join " + ")
     sourceFeeds = $sourceFeeds
     signals = $merged

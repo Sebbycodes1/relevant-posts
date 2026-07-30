@@ -242,8 +242,11 @@ try {
     $requestBody.input = $safeInput
     $requestJson = $requestBody | ConvertTo-Json -Depth 30 -Compress
     $requestJson = [Text.Encoding]::UTF8.GetString([Text.Encoding]::UTF8.GetBytes($requestJson))
+    try { $null = $requestJson | ConvertFrom-Json }
+    catch { throw "The newsletter/RSS request could not be serialized as valid JSON." }
     [IO.File]::WriteAllText((Join-Path $diagnosticDirectory "substack-request.json"), $requestJson, $diagnosticUtf8)
-    $apiResponse = Invoke-RestMethod -Method Post -Uri "https://api.x.ai/v1/responses" -Headers @{ Authorization = "Bearer $apiKey" } -ContentType "application/json" -Body $requestJson -TimeoutSec 180
+    $requestBytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($requestJson)
+    $apiResponse = Invoke-RestMethod -Method Post -Uri "https://api.x.ai/v1/responses" -Headers @{ Authorization = "Bearer $apiKey" } -ContentType "application/json; charset=utf-8" -Body $requestBytes -TimeoutSec 180
 }
 catch {
     $status = $_.Exception.Response.StatusCode.value__ 2>$null

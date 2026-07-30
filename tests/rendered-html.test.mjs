@@ -117,6 +117,10 @@ test("published dashboard embeds a valid ranked feed", async () => {
       assert.match(signal.commentaryUrl, /^https:\/\/(?:www\.)?x\.com\//, "commentary should keep a separate X URL");
       assert.ok(signal.commentarySource, "commentary should keep a separate source label");
       assert.ok(Number(signal.commentaryScore) > 0, "commentary should keep its own score");
+      if (signal.commentarySourceFamiliarity === "unknown") {
+        assert.ok(Number(signal.commentaryScore) >= 74, "unknown commentary needs the higher quality floor");
+        assert.equal(signal.commentaryHasDirectEvidenceLinks, true, "unknown commentary needs direct evidence");
+      }
     }
 
     if (signal.isBreaking) {
@@ -124,11 +128,24 @@ test("published dashboard embeds a valid ranked feed", async () => {
       const generatedAt = new Date(meta.generatedAt);
       const ageHours = (generatedAt.getTime() - eventPublishedAt.getTime()) / 3_600_000;
       assert.ok(ageHours >= 0 && ageHours <= 24, "Breaking should expire 24 hours after the underlying event");
+      assert.ok(Number(signal.score) >= 80, "Breaking requires a high-quality verified event");
     }
 
   }
 
   assert.ok(signals.some((signal) => signal.mustInclude || Number(signal.score) >= 60));
+  const modularDatacenterCoverage = signals.filter((signal) => {
+    const source = String(signal.source ?? "")
+      .replace(/[^a-z0-9]/gi, "")
+      .toLowerCase();
+    return (
+      source === "semianalysis" &&
+      /(?:modular|lego).*(?:data.?center|datacenter)|(?:data.?center|datacenter).*(?:modular|lego)/i.test(
+        signal.title,
+      )
+    );
+  });
+  assert.ok(modularDatacenterCoverage.length <= 1, "same-publisher X and newsletter coverage should be clustered");
   assert.match(
     html,
     /Number\(isBreakingNow\(right\)\) - Number\(isBreakingNow\(left\)\)/,

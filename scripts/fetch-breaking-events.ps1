@@ -6,8 +6,8 @@ param(
     [ValidateRange(24, 168)]
     [int]$FallbackLookbackHours = 72,
 
-    [ValidateRange(1, 20)]
-    [int]$MaxEvents = 12,
+    [ValidateRange(0, 60)]
+    [int]$MaxEvents = 0,
 
     [ValidateRange(1, 8)]
     [int]$MinimumCandidatesPerLane = 5,
@@ -16,6 +16,8 @@ param(
     [int]$MaxDiscoveryPasses = 2,
 
     [string]$Model = "grok-4.5",
+
+    [switch]$SkipGapAudit,
 
     [switch]$ReplayCandidates
 )
@@ -27,7 +29,9 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $outputPath = Join-Path $projectRoot "outputs\live-breaking-feed.json"
 $diagnosticDirectory = Join-Path $projectRoot "work"
 $candidatesPath = Join-Path $diagnosticDirectory "breaking-candidates.json"
+$discoveryCheckpointPath = Join-Path $diagnosticDirectory "breaking-discovery-checkpoint.json"
 $historyPath = Join-Path $diagnosticDirectory "verified-event-history.json"
+$catalystWatchlistPath = Join-Path $PSScriptRoot "catalyst-watchlist.json"
 $publishedDashboardPath = Join-Path $projectRoot "docs\index.html"
 . (Join-Path $PSScriptRoot "xai-key.ps1")
 
@@ -74,7 +78,19 @@ $primaryCutoff = $nowUtc.AddHours(-$PrimaryLookbackHours)
 $fallbackCutoff = $nowUtc.AddHours(-$FallbackLookbackHours)
 $fromDate = $fallbackCutoff.ToString("yyyy-MM-dd")
 $toDate = $nowUtc.ToString("yyyy-MM-dd")
-$laneCandidateLimit = 8
+$laneCandidateLimit = 12
+$catalystWatchlist = @()
+if (Test-Path -LiteralPath $catalystWatchlistPath) {
+    try {
+        $catalystWatchlist = @([IO.File]::ReadAllText($catalystWatchlistPath) | ConvertFrom-Json)
+    }
+    catch {
+        throw "The catalyst watchlist is invalid. $($_.Exception.Message)"
+    }
+}
+$catalystChecklist = @($catalystWatchlist | ForEach-Object {
+    "$($_.name) [$($_.segments -join ', ')] - $($_.officialUrl)"
+}) -join "`n"
 $discoveryLanes = @(
     [pscustomobject]@{
         name = "Models and laboratories"
@@ -99,6 +115,14 @@ $discoveryLanes = @(
     [pscustomobject]@{
         name = "Market-moving capital capacity and earnings"
         focus = "Same-day public-company filings, earnings, financings, investments, leases, customer commitments, capacity reservations and quantified deal terms across the AI stack. Prioritize developments likely to matter to public-equity analysts, including smaller suppliers and infrastructure companies that broad technology scans often miss."
+    },
+    [pscustomobject]@{
+        name = "Scheduled catalyst and official-source watchlist"
+        focus = @"
+Check every company below for a result, filing, investor presentation, material product or capacity disclosure first published inside the discovery window. This is a deterministic completeness check: do not stop after finding well-known hyperscalers, and do not return an upcoming-event notice as though results have occurred.
+
+$catalystChecklist
+"@
     }
 )
 
@@ -198,7 +222,7 @@ $requestBody = [ordered]@{
         },
         [ordered]@{ type = "web_search" }
     )
-    max_turns = 6
+    max_turns = 8
     text = [ordered]@{
         format = [ordered]@{
             type = "json_schema"
@@ -207,7 +231,7 @@ $requestBody = [ordered]@{
             strict = $true
         }
     }
-    max_output_tokens = 7000
+    max_output_tokens = 9000
     store = $false
 }
 
@@ -220,9 +244,48 @@ else {
     $apiKey = Get-XaiApiKey -ProjectRoot $projectRoot
     $allCandidates = @()
     $laneAudit = @()
+    $completedLaneNames = @{}
+    if (Test-Path -LiteralPath $discoveryCheckpointPath) {
+        try {
+            $checkpoint = [IO.File]::ReadAllText($discoveryCheckpointPath) | ConvertFrom-Json
+            $checkpointAgeHours = ($nowUtc - ([datetime]$checkpoint.generatedAt).ToUniversalTime()).TotalHours
+            if ($checkpointAgeHours -ge 0 -and $checkpointAgeHours -le 4 -and
+                [int]$checkpoint.primaryLookbackHours -eq $PrimaryLookbackHours -and
+                [int]$checkpoint.fallbackLookbackHours -eq $FallbackLookbackHours -and
+                [int]$checkpoint.maxDiscoveryPasses -eq $MaxDiscoveryPasses) {
+                $allCandidates = @($checkpoint.candidates)
+                $laneAudit = @($checkpoint.lanes)
+                foreach ($completedLane in @($laneAudit | Where-Object { $_.completed })) {
+                    $completedLaneNames[([string]$completedLane.lane)] = $true
+                }
+                if ($completedLaneNames.Count) {
+                    Write-Host "Resuming $($completedLaneNames.Count) completed discovery lanes from the recent checkpoint." -ForegroundColor DarkCyan
+                }
+            }
+        } catch {}
+    }
+
+    function Write-DiscoveryCheckpoint {
+        param([bool]$GapAuditCompleted = $false)
+        $checkpointPayload = [ordered]@{
+            generatedAt = $nowUtc.ToString("o")
+            primaryLookbackHours = $PrimaryLookbackHours
+            fallbackLookbackHours = $FallbackLookbackHours
+            maxDiscoveryPasses = $MaxDiscoveryPasses
+            gapAuditCompleted = $GapAuditCompleted
+            lanes = $laneAudit
+            candidates = $allCandidates
+        }
+        [IO.File]::WriteAllText($discoveryCheckpointPath, ($checkpointPayload | ConvertTo-Json -Depth 20), $utf8)
+    }
+
     try {
         for ($laneIndex = 0; $laneIndex -lt $discoveryLanes.Count; $laneIndex++) {
             $lane = $discoveryLanes[$laneIndex]
+            if ($completedLaneNames.ContainsKey($lane.name)) {
+                Write-Host "Reusing completed breaking-event lane: $($lane.name)" -ForegroundColor DarkCyan
+                continue
+            }
             $laneCandidates = @()
             $lanePasses = 0
             for ($pass = 1; $pass -le $MaxDiscoveryPasses; $pass++) {
@@ -262,7 +325,11 @@ $alreadyFound
                         else { ([string]$_.eventKey).Trim().ToLowerInvariant() }
                     } |
                     ForEach-Object { $_.Group | Select-Object -First 1 })
-                if ($laneCandidates.Count -ge $MinimumCandidatesPerLane) { break }
+                $requiresExhaustivePasses = $lane.name -in @(
+                    "Market-moving capital capacity and earnings",
+                    "Scheduled catalyst and official-source watchlist"
+                )
+                if ($laneCandidates.Count -ge $MinimumCandidatesPerLane -and -not $requiresExhaustivePasses) { break }
             }
             foreach ($candidate in $laneCandidates) {
                 $candidate | Add-Member -NotePropertyName discoveryLane -NotePropertyValue $lane.name -Force
@@ -272,14 +339,18 @@ $alreadyFound
                 lane = $lane.name
                 candidateCount = $laneCandidates.Count
                 passes = $lanePasses
+                completed = $true
             }
+            Write-DiscoveryCheckpoint
         }
 
         $candidateHeadlines = @($allCandidates | ForEach-Object {
             "$($_.publishedAt) | $($_.title) | $($_.primarySourceUrl)"
-        } | Select-Object -First 60) -join "`n"
+        } | Select-Object -First 120) -join "`n"
         $gapAuditName = "Cross-lane breaking gap audit"
-        $requestBody.input = @"
+        $gapAlreadyComplete = $completedLaneNames.ContainsKey($gapAuditName)
+        if (-not $SkipGapAudit -and -not $gapAlreadyComplete) {
+            $requestBody.input = @"
 $prompt
 
 This is a final cross-lane gap audit, not another topical lane. The preceding scans found the candidate list below:
@@ -287,31 +358,38 @@ $candidateHeadlines
 
 Search the current 24-hour window again across unrestricted X, official press releases, financial wires, filings, model repositories and lab newsrooms. Use broad X discussion as a gap-finding surface: search "announces", "released", "weights", "today", "earnings", "MW", "GW", "investment" and comparable semantic variants, then verify against primary sources. Return only material events missing from the supplied list. Pay particular attention to same-day model or weights releases, major lab investments, earnings disclosures, multi-hundred-megawatt or billion-dollar infrastructure commitments, semiconductor supply agreements and coordinated policy announcements. Do not repeat an event already represented above.
 "@
-        Write-Host "Scanning breaking events - final cross-lane gap audit..." -ForegroundColor Cyan
-        $gapResponse = Invoke-RestMethod `
-            -Method Post `
-            -Uri "https://api.x.ai/v1/responses" `
-            -Headers @{ Authorization = "Bearer $apiKey" } `
-            -ContentType "application/json" `
-            -Body ($requestBody | ConvertTo-Json -Depth 30 -Compress) `
-            -TimeoutSec 420
-        $gapMessage = @($gapResponse.output | Where-Object { $_.type -eq "message" }) | Select-Object -Last 1
-        $gapTextBlock = @($gapMessage.content | Where-Object { $_.type -eq "output_text" }) | Select-Object -First 1
-        if (-not $gapTextBlock.text) { throw "xAI returned no structured results for the cross-lane gap audit." }
-        try {
-            $gapResult = $gapTextBlock.text | ConvertFrom-Json
+            Write-Host "Scanning breaking events - final cross-lane gap audit..." -ForegroundColor Cyan
+            $gapResponse = Invoke-RestMethod `
+                -Method Post `
+                -Uri "https://api.x.ai/v1/responses" `
+                -Headers @{ Authorization = "Bearer $apiKey" } `
+                -ContentType "application/json" `
+                -Body ($requestBody | ConvertTo-Json -Depth 30 -Compress) `
+                -TimeoutSec 420
+            $gapMessage = @($gapResponse.output | Where-Object { $_.type -eq "message" }) | Select-Object -Last 1
+            $gapTextBlock = @($gapMessage.content | Where-Object { $_.type -eq "output_text" }) | Select-Object -First 1
+            if (-not $gapTextBlock.text) { throw "xAI returned no structured results for the cross-lane gap audit." }
+            try {
+                $gapResult = $gapTextBlock.text | ConvertFrom-Json
+            }
+            catch {
+                throw "xAI returned invalid event JSON for the cross-lane gap audit."
+            }
+            $gapCandidates = @($gapResult.candidates)
+            foreach ($candidate in $gapCandidates) {
+                $candidate | Add-Member -NotePropertyName discoveryLane -NotePropertyValue $gapAuditName -Force
+            }
+            $allCandidates += $gapCandidates
+            $laneAudit += [pscustomobject]@{
+                lane = $gapAuditName
+                candidateCount = $gapCandidates.Count
+                passes = 1
+                completed = $true
+            }
+            Write-DiscoveryCheckpoint -GapAuditCompleted $true
         }
-        catch {
-            throw "xAI returned invalid event JSON for the cross-lane gap audit."
-        }
-        $gapCandidates = @($gapResult.candidates)
-        foreach ($candidate in $gapCandidates) {
-            $candidate | Add-Member -NotePropertyName discoveryLane -NotePropertyValue $gapAuditName -Force
-        }
-        $allCandidates += $gapCandidates
-        $laneAudit += [pscustomobject]@{
-            lane = $gapAuditName
-            candidateCount = $gapCandidates.Count
+        elseif ($gapAlreadyComplete) {
+            Write-Host "Reusing the completed cross-lane gap audit." -ForegroundColor DarkCyan
         }
     }
     catch {
@@ -408,6 +486,9 @@ function Test-SameEvent {
     $entityOverlap = @($leftEntities | Where-Object { $rightEntitySet.ContainsKey($_) }).Count
     $sameType = $Left.eventType -and $Right.eventType -and
         ([string]$Left.eventType).ToLowerInvariant() -eq ([string]$Right.eventType).ToLowerInvariant()
+    if ($sameType -and ([string]$Left.eventType).ToLowerInvariant() -eq "earnings" -and $entityOverlap -gt 0 -and $hoursApart -le 36) {
+        return $true
+    }
     return $sameType -and $entityOverlap -gt 0 -and $similarity -ge 0.25
 }
 
@@ -530,16 +611,35 @@ foreach ($previous in $previousSignals) {
         $dateOnlyTimestamp = $previousPublishedUtc.TimeOfDay.TotalMinutes -eq 0
         $maximumAge = if ($dateOnlyTimestamp) { $FallbackLookbackHours + 24 } else { $FallbackLookbackHours + 8 }
         if ($previousAgeHours -ge -2 -and $previousAgeHours -le $maximumAge) {
-            $previous.discoveryWindowHours = if ($previousAgeHours -le 24) { 24 } else { 72 }
-            $previous.isBreaking = $previousAgeHours -ge 0 -and $previousAgeHours -le 24
-            $accepted += $previous
+        $previous.discoveryWindowHours = if ($previousAgeHours -le 24) { 24 } else { 72 }
+        $previous.isBreaking = $previousAgeHours -ge 0 -and $previousAgeHours -le 24 -and [int]$previous.score -ge 80
+        $accepted += $previous
         }
     } catch {}
 }
 
+function Get-FreshnessPriority {
+    param($Signal)
+    try {
+        $publishedUtc = ([datetime]$Signal.publishedAt).ToUniversalTime()
+        if ($publishedUtc.TimeOfDay.TotalMinutes -eq 0) {
+            $calendarDays = ($nowUtc.Date - $publishedUtc.Date).Days
+            if ($calendarDays -le 0) { return 3 }
+            if ($calendarDays -eq 1) { return 2 }
+            if ($calendarDays -le 3) { return 1 }
+            return 0
+        }
+        $ageHours = ($nowUtc - $publishedUtc).TotalHours
+        if ($ageHours -le 24) { return 3 }
+        if ($ageHours -le 48) { return 2 }
+        if ($ageHours -le 72) { return 1 }
+    } catch {}
+    return 0
+}
+
 $acceptedByQuality = @($accepted | Sort-Object `
+    @{ Expression = { Get-FreshnessPriority $_ }; Descending = $true }, `
     @{ Expression = { [int]$_.score }; Descending = $true }, `
-    @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
     @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true })
 
 $deduplicatedAccepted = @()
@@ -563,10 +663,12 @@ $historyFeed = [ordered]@{
 
 $accepted = @($deduplicatedAccepted |
     Sort-Object `
+        @{ Expression = { Get-FreshnessPriority $_ }; Descending = $true }, `
         @{ Expression = { [int]$_.score }; Descending = $true }, `
-        @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
-        @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true } |
-    Select-Object -First $MaxEvents)
+        @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true })
+if ($MaxEvents -gt 0) {
+    $accepted = @($accepted | Select-Object -First $MaxEvents)
+}
 
 [IO.File]::WriteAllText((Join-Path $diagnosticDirectory "breaking-rejections.json"), ($rejected | ConvertTo-Json -Depth 10), $utf8)
 
@@ -575,6 +677,8 @@ $feed = [ordered]@{
     source = "Broad AI event discovery"
     primaryLookbackHours = $PrimaryLookbackHours
     fallbackLookbackHours = $FallbackLookbackHours
+    qualifiedEventCount = $deduplicatedAccepted.Count
+    outputEventLimit = $MaxEvents
     discoveryLanes = @($result.lanes)
     signals = $accepted
 }

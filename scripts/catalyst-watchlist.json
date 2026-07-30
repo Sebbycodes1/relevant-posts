@@ -1,0 +1,162 @@
+[
+  {
+    "name": "NVIDIA",
+    "segments": ["accelerators", "systems", "networking"],
+    "officialUrl": "https://investor.nvidia.com/"
+  },
+  {
+    "name": "AMD",
+    "segments": ["accelerators", "CPUs", "systems"],
+    "officialUrl": "https://ir.amd.com/"
+  },
+  {
+    "name": "Broadcom",
+    "segments": ["custom silicon", "networking"],
+    "officialUrl": "https://investors.broadcom.com/"
+  },
+  {
+    "name": "Marvell",
+    "segments": ["custom silicon", "networking"],
+    "officialUrl": "https://investor.marvell.com/"
+  },
+  {
+    "name": "Qualcomm",
+    "segments": ["edge AI", "data-center CPUs"],
+    "officialUrl": "https://investor.qualcomm.com/"
+  },
+  {
+    "name": "Arm",
+    "segments": ["CPU IP", "data-center CPUs"],
+    "officialUrl": "https://investors.arm.com/"
+  },
+  {
+    "name": "Intel",
+    "segments": ["CPUs", "foundry", "accelerators"],
+    "officialUrl": "https://www.intc.com/"
+  },
+  {
+    "name": "TSMC",
+    "segments": ["foundry", "advanced packaging"],
+    "officialUrl": "https://investor.tsmc.com/"
+  },
+  {
+    "name": "Samsung Electronics",
+    "segments": ["memory", "HBM", "foundry"],
+    "officialUrl": "https://www.samsung.com/global/ir/"
+  },
+  {
+    "name": "SK hynix",
+    "segments": ["memory", "HBM"],
+    "officialUrl": "https://news.skhynix.com/"
+  },
+  {
+    "name": "Micron",
+    "segments": ["memory", "HBM"],
+    "officialUrl": "https://investors.micron.com/"
+  },
+  {
+    "name": "ASML",
+    "segments": ["lithography", "wafer-fab equipment"],
+    "officialUrl": "https://www.asml.com/en/investors"
+  },
+  {
+    "name": "Applied Materials",
+    "segments": ["wafer-fab equipment", "packaging"],
+    "officialUrl": "https://ir.appliedmaterials.com/"
+  },
+  {
+    "name": "Lam Research",
+    "segments": ["wafer-fab equipment", "memory"],
+    "officialUrl": "https://investor.lamresearch.com/"
+  },
+  {
+    "name": "KLA",
+    "segments": ["process control", "wafer-fab equipment"],
+    "officialUrl": "https://ir.kla.com/"
+  },
+  {
+    "name": "Tokyo Electron",
+    "segments": ["wafer-fab equipment"],
+    "officialUrl": "https://www.tel.com/ir/"
+  },
+  {
+    "name": "Amkor",
+    "segments": ["advanced packaging", "testing"],
+    "officialUrl": "https://ir.amkor.com/"
+  },
+  {
+    "name": "ASE Technology",
+    "segments": ["advanced packaging", "testing"],
+    "officialUrl": "https://www.aseglobal.com/investors/"
+  },
+  {
+    "name": "Microsoft",
+    "segments": ["hyperscaler", "models", "AI software"],
+    "officialUrl": "https://www.microsoft.com/en-us/Investor"
+  },
+  {
+    "name": "Alphabet",
+    "segments": ["hyperscaler", "models", "custom silicon"],
+    "officialUrl": "https://abc.xyz/investor/"
+  },
+  {
+    "name": "Amazon",
+    "segments": ["hyperscaler", "custom silicon"],
+    "officialUrl": "https://ir.aboutamazon.com/"
+  },
+  {
+    "name": "Meta",
+    "segments": ["hyperscaler", "models", "AI infrastructure"],
+    "officialUrl": "https://investor.atmeta.com/"
+  },
+  {
+    "name": "Oracle",
+    "segments": ["hyperscaler", "AI infrastructure"],
+    "officialUrl": "https://investor.oracle.com/"
+  },
+  {
+    "name": "CoreWeave",
+    "segments": ["neocloud", "AI infrastructure"],
+    "officialUrl": "https://investors.coreweave.com/"
+  },
+  {
+    "name": "Equinix",
+    "segments": ["datacenters", "interconnection"],
+    "officialUrl": "https://investor.equinix.com/"
+  },
+  {
+    "name": "Digital Realty",
+    "segments": ["datacenters"],
+    "officialUrl": "https://investor.digitalrealty.com/"
+  },
+  {
+    "name": "Vertiv",
+    "segments": ["datacenter power", "cooling"],
+    "officialUrl": "https://investors.vertiv.com/"
+  },
+  {
+    "name": "Eaton",
+    "segments": ["datacenter power", "electrical equipment"],
+    "officialUrl": "https://www.eaton.com/us/en-us/company/investor-relations.html"
+  },
+  {
+    "name": "Schneider Electric",
+    "segments": ["datacenter power", "cooling"],
+    "officialUrl": "https://www.se.com/ww/en/about-us/investor-relations/"
+  },
+  {
+    "name": "GE Vernova",
+    "segments": ["generation", "grid"],
+    "officialUrl": "https://www.gevernova.com/investors"
+  },
+  {
+    "name": "Constellation Energy",
+    "segments": ["nuclear power", "datacenter energy"],
+    "officialUrl": "https://investor.constellationenergy.com/"
+  },
+  {
+    "name": "NextEra Energy",
+    "segments": ["generation", "datacenter energy"],
+    "officialUrl": "https://www.investor.nexteraenergy.com/"
+  }
+]
