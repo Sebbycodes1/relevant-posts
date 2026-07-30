@@ -9,11 +9,21 @@ param(
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
+$nowUtc = (Get-Date).ToUniversalTime()
 if (-not $BreakingFeedPath) { $BreakingFeedPath = Join-Path $projectRoot "outputs\live-breaking-feed.json" }
 if (-not $CommentaryFeedPath) { $CommentaryFeedPath = Join-Path $projectRoot "outputs\live-commentary-feed.json" }
 if (-not $XFeedPath) { $XFeedPath = Join-Path $projectRoot "outputs\live-x-feed.json" }
 if (-not $SubstackFeedPath) { $SubstackFeedPath = Join-Path $projectRoot "outputs\live-substack-feed.json" }
 if (-not $OutputPath) { $OutputPath = Join-Path $projectRoot "outputs\live-combined-feed.json" }
+$commentaryExclusionsPath = Join-Path $PSScriptRoot "commentary-exclusions.json"
+$excludedCommentaryUrls = @{}
+if (Test-Path -LiteralPath $commentaryExclusionsPath) {
+    $commentaryExclusions = [IO.File]::ReadAllText($commentaryExclusionsPath) | ConvertFrom-Json
+    foreach ($url in @($commentaryExclusions.urls)) {
+        $normalizedUrl = ([string]$url).Trim().ToLowerInvariant()
+        if ($normalizedUrl) { $excludedCommentaryUrls[$normalizedUrl] = $true }
+    }
+}
 
 function Repair-DisplayText {
     param([string]$Text)
@@ -134,7 +144,10 @@ if (Test-Path -LiteralPath $SubstackFeedPath) {
 }
 if (Test-Path -LiteralPath $CommentaryFeedPath) {
     $commentaryFeed = [IO.File]::ReadAllText($CommentaryFeedPath) | ConvertFrom-Json
-    $selectedCommentaries = @($commentaryFeed.commentaries)
+    $selectedCommentaries = @($commentaryFeed.commentaries | Where-Object {
+        $commentaryUrl = ([string]$_.url).Trim().ToLowerInvariant()
+        -not ($commentaryUrl -and $excludedCommentaryUrls.ContainsKey($commentaryUrl))
+    })
     $sources += "Targeted commentary"
     $sourceFeeds += [ordered]@{
         name = "Event commentary"
@@ -145,6 +158,19 @@ if (Test-Path -LiteralPath $CommentaryFeedPath) {
 if ($allSignals.Count -eq 0) { throw "No live signals are available to merge." }
 $allSignals = @($allSignals | Where-Object { -not ($_.eventType -eq "other" -and [int]$_.score -lt 70) })
 if ($allSignals.Count -eq 0) { throw "No live signals cleared the event classification policy." }
+
+foreach ($item in $allSignals) {
+    if (-not [bool]$item.mustInclude) { continue }
+    try {
+        $eventPublishedUtc = ([datetime]$item.publishedAt).ToUniversalTime()
+        $eventAgeHours = ($nowUtc - $eventPublishedUtc).TotalHours
+        Set-ObjectProperty $item "isBreaking" ($eventAgeHours -ge 0 -and $eventAgeHours -le 24)
+        Set-ObjectProperty $item "discoveryWindowHours" $(if ($eventAgeHours -le 24) { 24 } else { 72 })
+    }
+    catch {
+        Set-ObjectProperty $item "isBreaking" $false
+    }
+}
 
 $rankedSignals = @($allSignals | Sort-Object `
     @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
@@ -237,12 +263,12 @@ foreach ($item in $merged) {
     Set-ObjectProperty $item "commentaryIncrementalValue" (Repair-DisplayText ([string]$commentary.incrementalValue))
     Set-ObjectProperty $item "commentaryAnalysisType" ([string]$commentary.analysisType)
     Set-ObjectProperty $item "commentaryScore" ([int]$commentary.commentaryScore)
+    Set-ObjectProperty $item "commentarySource" (Repair-DisplayText ([string]$commentary.source))
+    Set-ObjectProperty $item "commentaryHandle" ([string]$commentary.handle)
+    Set-ObjectProperty $item "commentaryPlatform" ([string]$commentary.platform)
+    Set-ObjectProperty $item "commentaryPublishedAt" ([string]$commentary.publishedAt)
+    Set-ObjectProperty $item "commentaryUrl" ([string]$commentary.url)
 
-    $item.source = Repair-DisplayText ([string]$commentary.source)
-    $item.handle = [string]$commentary.handle
-    $item.platform = [string]$commentary.platform
-    $item.publishedAt = [string]$commentary.publishedAt
-    $item.url = [string]$commentary.url
     $item.relatedSources = @($item.relatedSources + [string]$commentary.source | Where-Object { $_ } | Select-Object -Unique)
     $item.relatedUrls = @($item.relatedUrls + [string]$commentary.url | Where-Object { $_ } | Select-Object -Unique)
     $item.relatedCoverageCount = $item.relatedUrls.Count

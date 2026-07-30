@@ -530,6 +530,8 @@ foreach ($previous in $previousSignals) {
         $dateOnlyTimestamp = $previousPublishedUtc.TimeOfDay.TotalMinutes -eq 0
         $maximumAge = if ($dateOnlyTimestamp) { $FallbackLookbackHours + 24 } else { $FallbackLookbackHours + 8 }
         if ($previousAgeHours -ge -2 -and $previousAgeHours -le $maximumAge) {
+            $previous.discoveryWindowHours = if ($previousAgeHours -le 24) { 24 } else { 72 }
+            $previous.isBreaking = $previousAgeHours -ge 0 -and $previousAgeHours -le 24
             $accepted += $previous
         }
     } catch {}

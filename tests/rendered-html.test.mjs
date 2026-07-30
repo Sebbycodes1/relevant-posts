@@ -103,6 +103,29 @@ test("published dashboard embeds a valid ranked feed", async () => {
     ids.add(String(signal.id));
     urls.add(signal.url);
 
+    assert.notEqual(
+      signal.commentaryUrl,
+      "https://x.com/HedgeyeComm/status/2082542496727584945",
+      "explicitly rejected Meta/BlackRock commentary must not be republished",
+    );
+
+    if (signal.featuredCommentary) {
+      assert.equal(signal.url, signal.primarySourceUrl, "event card should retain its primary-source URL");
+      assert.equal(signal.source, signal.primarySourceName, "event card should retain its primary-source name");
+      assert.equal(signal.platform, signal.primarySourcePlatform, "event card should retain its primary-source platform");
+      assert.equal(signal.publishedAt, signal.eventPublishedAt, "event card should retain its event timestamp");
+      assert.match(signal.commentaryUrl, /^https:\/\/(?:www\.)?x\.com\//, "commentary should keep a separate X URL");
+      assert.ok(signal.commentarySource, "commentary should keep a separate source label");
+      assert.ok(Number(signal.commentaryScore) > 0, "commentary should keep its own score");
+    }
+
+    if (signal.isBreaking) {
+      const eventPublishedAt = new Date(signal.eventPublishedAt || signal.publishedAt);
+      const generatedAt = new Date(meta.generatedAt);
+      const ageHours = (generatedAt.getTime() - eventPublishedAt.getTime()) / 3_600_000;
+      assert.ok(ageHours >= 0 && ageHours <= 24, "Breaking should expire 24 hours after the underlying event");
+    }
+
   }
 
   assert.ok(signals.some((signal) => signal.mustInclude || Number(signal.score) >= 60));
