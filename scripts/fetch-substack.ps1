@@ -235,7 +235,15 @@ $apiResponse = $null
 $apiKey = Get-XaiApiKey -ProjectRoot $projectRoot
 try {
     Write-Host "Scoring recent newsletter and RSS articles..." -ForegroundColor Cyan
-    $apiResponse = Invoke-RestMethod -Method Post -Uri "https://api.x.ai/v1/responses" -Headers @{ Authorization = "Bearer $apiKey" } -ContentType "application/json" -Body ($requestBody | ConvertTo-Json -Depth 30 -Compress) -TimeoutSec 180
+    $safeInput = [string]$requestBody.input
+    $safeInput = [regex]::Replace($safeInput, '(?i)\\ud[89ab][0-9a-f]{2}\\ud[c-f][0-9a-f]{2}', '')
+    $safeInput = [regex]::Replace($safeInput, '(?i)\\ud[89ab][0-9a-f]{2}|\\ud[c-f][0-9a-f]{2}', '')
+    $safeInput = [regex]::Replace($safeInput, '[^\u0009\u000a\u000d\u0020-\u007e]', ' ')
+    $requestBody.input = $safeInput
+    $requestJson = $requestBody | ConvertTo-Json -Depth 30 -Compress
+    $requestJson = [Text.Encoding]::UTF8.GetString([Text.Encoding]::UTF8.GetBytes($requestJson))
+    [IO.File]::WriteAllText((Join-Path $diagnosticDirectory "substack-request.json"), $requestJson, $diagnosticUtf8)
+    $apiResponse = Invoke-RestMethod -Method Post -Uri "https://api.x.ai/v1/responses" -Headers @{ Authorization = "Bearer $apiKey" } -ContentType "application/json" -Body $requestJson -TimeoutSec 180
 }
 catch {
     $status = $_.Exception.Response.StatusCode.value__ 2>$null
