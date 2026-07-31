@@ -11,6 +11,9 @@ const projectRootPath = fileURLToPath(projectRoot);
 const publishedDashboardUrl = new URL("../docs/index.html", import.meta.url);
 const builderUrl = new URL("../scripts/build-live-dashboard.ps1", import.meta.url);
 const publisherUrl = new URL("../scripts/publish-dashboard.ps1", import.meta.url);
+const refreshUrl = new URL("../scripts/refresh-signal-desk.ps1", import.meta.url);
+const budgetHelperUrl = new URL("../scripts/xai-cost-budget.ps1", import.meta.url);
+const dailyRefreshUrl = new URL("../refresh-and-publish.cmd", import.meta.url);
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -231,4 +234,21 @@ test("dashboard builder refreshes static and runtime metadata idempotently", asy
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
   }
+});
+
+test("daily refresh has an enforceable low-cost xAI profile", async () => {
+  const [refreshScript, budgetHelper, dailyRefresh] = await Promise.all([
+    readFile(refreshUrl, "utf8"),
+    readFile(budgetHelperUrl, "utf8"),
+    readFile(dailyRefreshUrl, "utf8"),
+  ]);
+
+  assert.match(dailyRefresh, /-Budget\b/);
+  assert.match(dailyRefresh, /-MaxXaiSpendUsd 1\.00/);
+  assert.match(dailyRefresh, /-MaxXaiRequests 8/);
+  assert.match(refreshScript, /-CommentaryEventLimit 2\b/);
+  assert.match(refreshScript, /-MaxBatches 1\b/);
+  assert.match(refreshScript, /-Model "grok-4\.3"/);
+  assert.match(budgetHelper, /cost_in_usd_ticks/);
+  assert.match(budgetHelper, /maximumRequests/);
 });

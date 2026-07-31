@@ -6,16 +6,18 @@ Relevant Posts is a locally refreshed AI intelligence feed for asset-management 
 
 ### Refresh and publish
 
-1. In the morning, double-click `refresh-and-publish.cmd` in the project folder.
-2. Leave the window open while the source passes and quality checks run. A full refresh usually takes 30–45 minutes.
+1. In the morning, double-click `refresh-and-publish.cmd` in the project folder. This is the default budget refresh: it uses the lower-cost model, makes no more than eight xAI requests and stops near a $1 run limit.
+2. Leave the window open while the source passes and quality checks run.
 3. If every source lane succeeds, the workflow updates the shared GitHub Pages dashboard automatically.
-4. After major afternoon earnings or announcements, double-click `refresh-and-publish-catch-up.cmd`. This lighter pass retains the morning account and newsletter scans while checking for newly completed events and their X commentary.
+4. After major afternoon earnings or announcements, double-click `refresh-and-publish-catch-up.cmd`. This lighter pass retains the morning account and newsletter scans, with a five-request / $0.60 stop-limit.
+
+`refresh-and-publish-full.cmd` retains the deeper, higher-cost workflow for occasional audits. It is no longer the daily default.
 
 The public page is never changed after a partial or failed refresh. The command requires the local xAI key to be configured and this repository to be signed in to GitHub.
 
 For a local-only update, double-click `outputs\refresh-relevant-posts.cmd`. The resulting dashboard opens as `outputs\signal-desk-live.html` without changing the shared link.
 
-The refresh is manual by design for the prototype, keeping xAI usage predictable. The last successful result from an individual source lane is retained if another lane fails. The latest run status is saved to `work\last-refresh-status.json`.
+The refresh is manual by design for the prototype. Budget runs record the exact per-request cost returned by xAI, stop before optional work when the run limit is reached and save the total to `work\xai-refresh-budget.json`. The last successful result from an individual source lane is retained if another lane fails.
 
 ## What the refresh does
 

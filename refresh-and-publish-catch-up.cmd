@@ -1,7 +1,7 @@
 @echo off
 title Catch up and publish Relevant Posts
 cd /d "%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\refresh-signal-desk.ps1" -CatchUp -BreakingLookbackHours 12 -Publish
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\refresh-signal-desk.ps1" -CatchUp -Budget -MaxXaiSpendUsd 0.60 -MaxXaiRequests 5 -BreakingLookbackHours 12 -Publish
 if errorlevel 1 (
   echo.
   echo The public dashboard was not changed. Review the message above.

@@ -23,6 +23,8 @@ param(
 
     [string]$Model = "grok-4.5",
 
+    [switch]$Economy,
+
     [switch]$ReplayCandidates
 )
 
@@ -40,6 +42,7 @@ $rejectionAuditPath = Join-Path $diagnosticDirectory "commentary-rejections.json
 $coverageAuditPath = Join-Path $diagnosticDirectory "x-commentary-coverage.json"
 $sourcePerformancePath = Join-Path $diagnosticDirectory "x-source-performance.json"
 . (Join-Path $PSScriptRoot "xai-key.ps1")
+. (Join-Path $PSScriptRoot "xai-cost-budget.ps1")
 
 New-Item -ItemType Directory -Path $diagnosticDirectory -Force | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding($false)
@@ -120,6 +123,7 @@ function Invoke-XaiStructuredRequest {
         $RequestBody.input = $safeInput
         $bodyJson = $RequestBody | ConvertTo-Json -Depth 35 -Compress
         $bodyJson = [Text.Encoding]::UTF8.GetString([Text.Encoding]::UTF8.GetBytes($bodyJson))
+        Assert-XaiBudgetAvailable $Context
         $response = Invoke-RestMethod `
             -Method Post `
             -Uri "https://api.x.ai/v1/responses" `
@@ -127,6 +131,7 @@ function Invoke-XaiStructuredRequest {
             -ContentType "application/json" `
             -Body $bodyJson `
             -TimeoutSec 420
+        Register-XaiResponseUsage $response $Context
         return Get-ResponseJson $response $Context
     }
     catch {
@@ -314,7 +319,7 @@ Collect up to $CandidatesPerEvent real posts. Maximize recall at this stage: inc
                             enable_image_understanding = $true
                         }
                     )
-                    max_turns = 8
+                    max_turns = if ($Economy) { 4 } else { 8 }
                     text = [ordered]@{
                         format = [ordered]@{
                             type = "json_schema"
@@ -323,7 +328,7 @@ Collect up to $CandidatesPerEvent real posts. Maximize recall at this stage: inc
                             strict = $true
                         }
                     }
-                    max_output_tokens = 8500
+                    max_output_tokens = if ($Economy) { 5000 } else { 8500 }
                     store = $false
                 }
 
@@ -388,7 +393,7 @@ For every candidate URL, label only what the supplied post and thread context su
                         strict = $true
                     }
                 }
-                max_output_tokens = 8500
+                max_output_tokens = if ($Economy) { 5000 } else { 8500 }
                 store = $false
             }
             $gradingResult = Invoke-XaiStructuredRequest $apiKey $gradingBody "commentary grading for $($event.title)"

@@ -6,7 +6,12 @@ param(
     [ValidateRange(1, 30)]
     [int]$MaxSignals = 20,
 
-    [string]$Model = "grok-4.5"
+    [ValidateRange(0, 10)]
+    [int]$MaxBatches = 0,
+
+    [string]$Model = "grok-4.5",
+
+    [switch]$Economy
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,6 +20,7 @@ $ProgressPreference = "SilentlyContinue"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $outputPath = Join-Path $projectRoot "outputs\live-x-feed.json"
 . (Join-Path $PSScriptRoot "xai-key.ps1")
+. (Join-Path $PSScriptRoot "xai-cost-budget.ps1")
 
 $coreHandles = @("ArtificialAnlys", "EpochAIResearch", "SemiAnalysis_", "interconnectsai", "AnthropicAI", "simonw")
 $contextHandles = @(
@@ -165,7 +171,7 @@ $requestBody = [ordered]@{
         },
         [ordered]@{ type = "web_search" }
     )
-    max_turns = 6
+    max_turns = if ($Economy) { 4 } else { 6 }
     text = [ordered]@{
         format = [ordered]@{
             type = "json_schema"
@@ -174,7 +180,7 @@ $requestBody = [ordered]@{
             strict = $true
         }
     }
-    max_output_tokens = 10000
+    max_output_tokens = if ($Economy) { 6000 } else { 10000 }
     store = $false
 }
 
@@ -182,6 +188,9 @@ $handleBatches = @()
 for ($offset = 0; $offset -lt $handles.Count; $offset += 10) {
     $lastIndex = [Math]::Min($offset + 9, $handles.Count - 1)
     $handleBatches += ,@($handles[$offset..$lastIndex])
+}
+if ($MaxBatches -gt 0 -and $handleBatches.Count -gt $MaxBatches) {
+    $handleBatches = @($handleBatches | Select-Object -First $MaxBatches)
 }
 
 $responses = @()
@@ -196,13 +205,17 @@ try {
         $bodyJson = $requestBody | ConvertTo-Json -Depth 30 -Compress
 
         Write-Host "Searching curated X accounts - pass $($batchIndex + 1) of $($handleBatches.Count)..." -ForegroundColor Cyan
-        $responses += Invoke-RestMethod `
+        $stage = "Curated X accounts pass $($batchIndex + 1)"
+        Assert-XaiBudgetAvailable $stage
+        $response = Invoke-RestMethod `
             -Method Post `
             -Uri "https://api.x.ai/v1/responses" `
             -Headers $headers `
             -ContentType "application/json" `
             -Body $bodyJson `
             -TimeoutSec 300
+        Register-XaiResponseUsage $response $stage
+        $responses += $response
     }
 }
 catch {

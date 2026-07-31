@@ -17,6 +17,8 @@ param(
 
     [string]$Model = "grok-4.5",
 
+    [switch]$Economy,
+
     [switch]$SkipGapAudit,
 
     [switch]$ReplayCandidates
@@ -34,6 +36,7 @@ $historyPath = Join-Path $diagnosticDirectory "verified-event-history.json"
 $catalystWatchlistPath = Join-Path $PSScriptRoot "catalyst-watchlist.json"
 $publishedDashboardPath = Join-Path $projectRoot "docs\index.html"
 . (Join-Path $PSScriptRoot "xai-key.ps1")
+. (Join-Path $PSScriptRoot "xai-cost-budget.ps1")
 
 New-Item -ItemType Directory -Path $diagnosticDirectory -Force | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding($false)
@@ -125,6 +128,19 @@ $catalystChecklist
 "@
     }
 )
+if ($Economy) {
+    $laneCandidateLimit = 20
+    $discoveryLanes = @(
+        [pscustomobject]@{
+            name = "Budget broad AI-stack scan"
+            focus = @"
+Run one consolidated completeness pass across: frontier and open-weight models; laboratories; chips, memory, foundry, packaging and networking; datacenters, energy and cooling; hyperscalers and enterprise AI; policy, standards and open source; and market-moving earnings, capital, supply or capacity disclosures. Prioritize same-day developments and use the official-source watchlist below as a catalyst checklist rather than as a reason to include routine items.
+
+$catalystChecklist
+"@
+        }
+    )
+}
 
 $prompt = @"
 You are the breaking-events editor for an institutional asset-management AI intelligence feed.
@@ -222,7 +238,7 @@ $requestBody = [ordered]@{
         },
         [ordered]@{ type = "web_search" }
     )
-    max_turns = 8
+    max_turns = if ($Economy) { 4 } else { 8 }
     text = [ordered]@{
         format = [ordered]@{
             type = "json_schema"
@@ -231,7 +247,7 @@ $requestBody = [ordered]@{
             strict = $true
         }
     }
-    max_output_tokens = 9000
+    max_output_tokens = if ($Economy) { 6000 } else { 9000 }
     store = $false
 }
 
@@ -249,7 +265,9 @@ else {
         try {
             $checkpoint = [IO.File]::ReadAllText($discoveryCheckpointPath) | ConvertFrom-Json
             $checkpointAgeHours = ($nowUtc - ([datetime]$checkpoint.generatedAt).ToUniversalTime()).TotalHours
-            if ($checkpointAgeHours -ge 0 -and $checkpointAgeHours -le 4 -and
+            $checkpointProfile = if ($checkpoint.PSObject.Properties["profile"]) { [string]$checkpoint.profile } else { "full" }
+            $requestedProfile = if ($Economy) { "economy" } else { "full" }
+            if ($checkpointAgeHours -ge 0 -and $checkpointAgeHours -le 4 -and $checkpointProfile -eq $requestedProfile -and
                 [int]$checkpoint.primaryLookbackHours -eq $PrimaryLookbackHours -and
                 [int]$checkpoint.fallbackLookbackHours -eq $FallbackLookbackHours -and
                 [int]$checkpoint.maxDiscoveryPasses -eq $MaxDiscoveryPasses) {
@@ -269,6 +287,7 @@ else {
         param([bool]$GapAuditCompleted = $false)
         $checkpointPayload = [ordered]@{
             generatedAt = $nowUtc.ToString("o")
+            profile = if ($Economy) { "economy" } else { "full" }
             primaryLookbackHours = $PrimaryLookbackHours
             fallbackLookbackHours = $FallbackLookbackHours
             maxDiscoveryPasses = $MaxDiscoveryPasses
@@ -300,6 +319,8 @@ $alreadyFound
                 } else { "" }
                 $requestBody.input = "$prompt`n`nAssigned discovery lane: $($lane.name)`nLane focus: $($lane.focus)$retryContext"
                 Write-Host "Scanning breaking events - lane $($laneIndex + 1) of $($discoveryLanes.Count), pass $pass`: $($lane.name)..." -ForegroundColor Cyan
+                $stage = "$($lane.name) pass $pass"
+                Assert-XaiBudgetAvailable $stage
                 $response = Invoke-RestMethod `
                     -Method Post `
                     -Uri "https://api.x.ai/v1/responses" `
@@ -307,6 +328,7 @@ $alreadyFound
                     -ContentType "application/json" `
                     -Body ($requestBody | ConvertTo-Json -Depth 30 -Compress) `
                     -TimeoutSec 420
+                Register-XaiResponseUsage $response $stage
 
                 $message = @($response.output | Where-Object { $_.type -eq "message" }) | Select-Object -Last 1
                 $textBlock = @($message.content | Where-Object { $_.type -eq "output_text" }) | Select-Object -First 1
@@ -359,6 +381,7 @@ $candidateHeadlines
 Search the current 24-hour window again across unrestricted X, official press releases, financial wires, filings, model repositories and lab newsrooms. Use broad X discussion as a gap-finding surface: search "announces", "released", "weights", "today", "earnings", "MW", "GW", "investment" and comparable semantic variants, then verify against primary sources. Return only material events missing from the supplied list. Pay particular attention to same-day model or weights releases, major lab investments, earnings disclosures, multi-hundred-megawatt or billion-dollar infrastructure commitments, semiconductor supply agreements and coordinated policy announcements. Do not repeat an event already represented above.
 "@
             Write-Host "Scanning breaking events - final cross-lane gap audit..." -ForegroundColor Cyan
+            Assert-XaiBudgetAvailable "Cross-lane breaking gap audit"
             $gapResponse = Invoke-RestMethod `
                 -Method Post `
                 -Uri "https://api.x.ai/v1/responses" `
@@ -366,6 +389,7 @@ Search the current 24-hour window again across unrestricted X, official press re
                 -ContentType "application/json" `
                 -Body ($requestBody | ConvertTo-Json -Depth 30 -Compress) `
                 -TimeoutSec 420
+            Register-XaiResponseUsage $gapResponse "Cross-lane breaking gap audit"
             $gapMessage = @($gapResponse.output | Where-Object { $_.type -eq "message" }) | Select-Object -Last 1
             $gapTextBlock = @($gapMessage.content | Where-Object { $_.type -eq "output_text" }) | Select-Object -First 1
             if (-not $gapTextBlock.text) { throw "xAI returned no structured results for the cross-lane gap audit." }
