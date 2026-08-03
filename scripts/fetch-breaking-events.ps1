@@ -625,7 +625,12 @@ foreach ($item in @($result.candidates)) {
 
 $newAcceptedCount = $accepted.Count
 if ($newAcceptedCount -eq 0) {
-    throw "The broad event scan produced no newly verified events. The previous verified-event snapshot was retained and this lane was marked incomplete."
+    if ($Economy) {
+        Write-Host "No new verified major event was found; publishing a current quiet-lane snapshot." -ForegroundColor DarkCyan
+    }
+    else {
+        throw "The broad event scan produced no newly verified events. The previous verified-event snapshot was retained and this lane was marked incomplete."
+    }
 }
 
 foreach ($previous in $previousSignals) {
