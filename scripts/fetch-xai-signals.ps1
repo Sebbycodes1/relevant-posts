@@ -366,25 +366,46 @@ $finalSignals = @($validSignals |
     Sort-Object score -Descending |
     Select-Object -First $MaxSignals)
 
+$collectionStatus = "fresh"
+$retainedFrom = $null
 if ($finalSignals.Count -eq 0) {
+    $retainedSignals = @()
     if (Test-Path -LiteralPath $outputPath) {
         try {
             $previousFeed = [IO.File]::ReadAllText($outputPath) | ConvertFrom-Json
-            if (@($previousFeed.signals).Count -gt 0) {
-                throw "No new curated X posts cleared the screen. The last successful X snapshot was retained and this lane was marked incomplete."
+            $retainedSignals = @($previousFeed.signals | Where-Object {
+                try {
+                    ([datetime]$_.publishedAt).ToUniversalTime() -ge $fromTime.ToUniversalTime()
+                }
+                catch { $false }
+            })
+            if ($retainedSignals.Count -gt 0) {
+                $retainedFrom = [string]$previousFeed.generatedAt
             }
         }
         catch {
-            if ($_.Exception.Message -like "No new curated X posts*") { throw }
+            Write-Warning "The previous curated X snapshot could not be read; this refresh will record a quiet lane."
         }
     }
-    throw "No curated X posts cleared the screen and no earlier successful X snapshot is available."
+
+    if ($retainedSignals.Count -gt 0) {
+        $finalSignals = @($retainedSignals | Sort-Object score -Descending | Select-Object -First $MaxSignals)
+        $collectionStatus = "quiet_retained_current"
+        Write-Warning "No new curated-account X posts cleared the screen; retaining $($finalSignals.Count) still-current posts from the prior snapshot."
+    }
+    else {
+        $finalSignals = @()
+        $collectionStatus = "quiet_empty"
+        Write-Warning "No curated-account X posts cleared the screen in the current lookback window. This is a valid quiet lane; broad event discovery and event-specific commentary remain active."
+    }
 }
 
 $finalFeed = [ordered]@{
     generatedAt = (Get-Date).ToUniversalTime().ToString("o")
     source = "xAI X Search"
     lookbackHours = $LookbackHours
+    collectionStatus = $collectionStatus
+    retainedFrom = $retainedFrom
     handles = $handles
     sourcePolicy = [ordered]@{ core = $coreHandles; context = $contextHandles; eventGated = $eventGatedHandles }
     signals = $finalSignals
