@@ -136,13 +136,23 @@ $commentaryFeed = $null
 $selectedCommentaries = @()
 $xFeed = $null
 $substackFeed = $null
+$fallbackRetentionHours = 72
+$strategicRetentionHours = 168
 if (Test-Path -LiteralPath $BreakingFeedPath) {
     $breakingFeed = [IO.File]::ReadAllText($BreakingFeedPath) | ConvertFrom-Json
+    $fallbackRetentionHours = if ($breakingFeed.PSObject.Properties["fallbackLookbackHours"]) { [int]$breakingFeed.fallbackLookbackHours } else { 72 }
+    $strategicRetentionHours = if ($breakingFeed.PSObject.Properties["strategicRetentionHours"]) { [int]$breakingFeed.strategicRetentionHours } else { 168 }
     $breakingSignals = @($breakingFeed.signals | Where-Object {
         try {
             $publishedUtc = ([datetime]$_.publishedAt).ToUniversalTime()
-            $maximumAge = if ($publishedUtc.TimeOfDay.TotalMinutes -eq 0) { 96 } else { 80 }
-            ((Get-Date).ToUniversalTime() - $publishedUtc).TotalHours -le $maximumAge
+            $dateOnly = $publishedUtc.TimeOfDay.TotalMinutes -eq 0
+            $normalMaximumAge = if ($dateOnly) { $fallbackRetentionHours + 24 } else { $fallbackRetentionHours + 8 }
+            $strategicMaximumAge = if ($dateOnly) { $strategicRetentionHours + 24 } else { $strategicRetentionHours + 8 }
+            $ageHours = ($nowUtc - $publishedUtc).TotalHours
+            $ageHours -le $normalMaximumAge -or (
+                $ageHours -le $strategicMaximumAge -and [bool]$_.mustInclude -and
+                [bool]$_.hasPrimaryEvidence -and [int]$_.score -ge 82
+            )
         }
         catch { $false }
     })
@@ -197,7 +207,9 @@ foreach ($item in $allSignals) {
         $eventPublishedUtc = ([datetime]$item.publishedAt).ToUniversalTime()
         $eventAgeHours = ($nowUtc - $eventPublishedUtc).TotalHours
         Set-ObjectProperty $item "isBreaking" ($eventAgeHours -ge 0 -and $eventAgeHours -le 24 -and [int]$item.score -ge 80)
-        Set-ObjectProperty $item "discoveryWindowHours" $(if ($eventAgeHours -le 24) { 24 } else { 72 })
+        $isStrategic = $eventAgeHours -gt 24 -and $eventAgeHours -le $strategicRetentionHours -and [int]$item.score -ge 82 -and [bool]$item.hasPrimaryEvidence
+        Set-ObjectProperty $item "isStrategic" $isStrategic
+        Set-ObjectProperty $item "discoveryWindowHours" $(if ($eventAgeHours -le 24) { 24 } elseif ($eventAgeHours -le $fallbackRetentionHours) { $fallbackRetentionHours } else { $strategicRetentionHours })
     }
     catch {
         Set-ObjectProperty $item "isBreaking" $false
@@ -206,6 +218,7 @@ foreach ($item in $allSignals) {
 
 $rankedSignals = @($allSignals | Sort-Object `
     @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
+    @{ Expression = { if ([bool]$_.isStrategic) { 1 } else { 0 } }; Descending = $true }, `
     @{ Expression = { Get-FreshnessPriority $_ }; Descending = $true }, `
     @{ Expression = { [int]$_.score }; Descending = $true }, `
     @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true }, `

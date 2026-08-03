@@ -9,9 +9,14 @@ param(
     [ValidateRange(0, 10)]
     [int]$MaxBatches = 0,
 
+    [ValidateRange(1, 4)]
+    [int]$MaxConcurrency = 2,
+
     [string]$Model = "grok-4.5",
 
-    [switch]$Economy
+    [switch]$Economy,
+
+    [switch]$SkipMerge
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,6 +26,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $outputPath = Join-Path $projectRoot "outputs\live-x-feed.json"
 . (Join-Path $PSScriptRoot "xai-key.ps1")
 . (Join-Path $PSScriptRoot "xai-cost-budget.ps1")
+. (Join-Path $PSScriptRoot "xai-request-batch.ps1")
 
 $coreHandles = @("ArtificialAnlys", "EpochAIResearch", "SemiAnalysis_", "interconnectsai", "AnthropicAI", "simonw")
 $contextHandles = @(
@@ -197,26 +203,23 @@ $responses = @()
 $apiKey = Get-XaiApiKey -ProjectRoot $projectRoot
 
 try {
-    $headers = @{ Authorization = "Bearer $apiKey" }
+    $requests = @()
     for ($batchIndex = 0; $batchIndex -lt $handleBatches.Count; $batchIndex++) {
         $batchHandles = @($handleBatches[$batchIndex])
         $requestBody.input = "$prompt`n`nThis is search pass $($batchIndex + 1) of $($handleBatches.Count). Search only these handles in this pass: $($batchHandles -join ', ')."
         $requestBody.tools[0].allowed_x_handles = $batchHandles
         $bodyJson = $requestBody | ConvertTo-Json -Depth 30 -Compress
 
-        Write-Host "Searching curated X accounts - pass $($batchIndex + 1) of $($handleBatches.Count)..." -ForegroundColor Cyan
         $stage = "Curated X accounts pass $($batchIndex + 1)"
-        Assert-XaiBudgetAvailable $stage
-        $response = Invoke-RestMethod `
-            -Method Post `
-            -Uri "https://api.x.ai/v1/responses" `
-            -Headers $headers `
-            -ContentType "application/json" `
-            -Body $bodyJson `
-            -TimeoutSec 300
-        Register-XaiResponseUsage $response $stage
-        $responses += $response
+        $requests += [pscustomobject]@{
+            Key = [string]$batchIndex
+            Stage = $stage
+            BodyJson = $bodyJson
+        }
     }
+    Write-Host "Searching $($handleBatches.Count) curated-X account batches with up to $MaxConcurrency running together..." -ForegroundColor Cyan
+    $batchResults = @(Invoke-XaiResponseBatch -Requests $requests -ApiKey $apiKey -MaxConcurrency $MaxConcurrency -TimeoutSeconds 300)
+    $responses = @($batchResults | Sort-Object { [int]$_.Key } | ForEach-Object { $_.Response })
 }
 catch {
     $status = $_.Exception.Response.StatusCode.value__ 2>$null
@@ -230,7 +233,7 @@ catch {
     throw "The xAI request failed. Confirm outbound access to api.x.ai and try again. Details: $($_.Exception.Message)"
 }
 finally {
-    Remove-Variable apiKey, headers -ErrorAction SilentlyContinue
+    Remove-Variable apiKey -ErrorAction SilentlyContinue
 }
 
 $returnedSignals = @()
@@ -414,8 +417,10 @@ $finalFeed = [ordered]@{
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($outputPath, ($finalFeed | ConvertTo-Json -Depth 20), $utf8)
 
-$feedMerger = Join-Path $PSScriptRoot "merge-live-feeds.ps1"
-& $feedMerger | Out-Host
+if (-not $SkipMerge) {
+    $feedMerger = Join-Path $PSScriptRoot "merge-live-feeds.ps1"
+    & $feedMerger | Out-Host
+}
 
 Write-Host ""
 Write-Host "Created a local feed with $($finalSignals.Count) verified-link X signals." -ForegroundColor Green

@@ -8,7 +8,9 @@ param(
 
     [string]$Model = "grok-4.5",
 
-    [switch]$Economy
+    [switch]$Economy,
+
+    [switch]$SkipMerge
 )
 
 $ErrorActionPreference = "Stop"
@@ -348,8 +350,10 @@ if ($validSignals.Count -eq 0 -and (Test-Path -LiteralPath $outputPath)) {
         $previousFeed = [IO.File]::ReadAllText($outputPath) | ConvertFrom-Json
         if (@($previousFeed.signals).Count -gt 0) {
             Write-Warning "No new newsletter/RSS articles cleared the screen; retaining the last successful snapshot."
-            $merger = Join-Path $PSScriptRoot "merge-live-feeds.ps1"
-            & $merger | Out-Host
+            if (-not $SkipMerge) {
+                $merger = Join-Path $PSScriptRoot "merge-live-feeds.ps1"
+                & $merger | Out-Host
+            }
             return
         }
     } catch {}
@@ -358,6 +362,8 @@ if ($validSignals.Count -eq 0 -and (Test-Path -LiteralPath $outputPath)) {
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($outputPath, ($feed | ConvertTo-Json -Depth 20), $utf8)
 
-$merger = Join-Path $PSScriptRoot "merge-live-feeds.ps1"
-& $merger | Out-Host
+if (-not $SkipMerge) {
+    $merger = Join-Path $PSScriptRoot "merge-live-feeds.ps1"
+    & $merger | Out-Host
+}
 Write-Host "Created a newsletter/RSS feed with $($validSignals.Count) scored articles." -ForegroundColor Green

@@ -38,6 +38,10 @@ $laneResults = @()
 if ($Budget) {
     $null = Initialize-XaiCostBudget -ProjectRoot $projectRoot -MaximumUsd $MaxXaiSpendUsd -MaximumRequests $MaxXaiRequests
 }
+else {
+    # Full refreshes are not capped, but are still measured request-by-request.
+    $null = Initialize-XaiCostBudget -ProjectRoot $projectRoot -MaximumUsd 1000 -MaximumRequests 500 -TrackOnly
+}
 
 function Test-IsBudgetStop {
     param([string]$Message)
@@ -60,7 +64,8 @@ function Write-RefreshStatus {
         published = $Published
         publishMessage = $PublishMessage
         profile = if ($Budget) { "budget" } elseif ($CatchUp) { "catch_up" } else { "full" }
-        xaiBudget = if ($Budget) { Get-XaiBudgetSummary } else { $null }
+        elapsedMinutes = [Math]::Round(((Get-Date).ToUniversalTime() - $runStartedAt).TotalMinutes, 2)
+        xaiUsage = Get-XaiBudgetSummary
         failures = $failures
         lanes = $laneResults
     }
@@ -73,10 +78,10 @@ Write-Host "Refreshing Relevant Posts..." -ForegroundColor Cyan
 try {
     $breakingPasses = if ($CatchUp -or $Budget) { 1 } else { 2 }
     if ($Budget) {
-        & (Join-Path $PSScriptRoot "fetch-breaking-events.ps1") -PrimaryLookbackHours $BreakingLookbackHours -FallbackLookbackHours $BreakingFallbackHours -MaxEvents 0 -MaxDiscoveryPasses 1 -Model "grok-4.3" -Economy -SkipGapAudit
+        & (Join-Path $PSScriptRoot "fetch-breaking-events.ps1") -PrimaryLookbackHours $BreakingLookbackHours -FallbackLookbackHours $BreakingFallbackHours -StrategicRetentionHours 168 -MaxEvents 0 -MaxDiscoveryPasses 1 -MaxConcurrency 1 -Model "grok-4.3" -Economy -SkipGapAudit -SkipMerge
     }
     else {
-        & (Join-Path $PSScriptRoot "fetch-breaking-events.ps1") -PrimaryLookbackHours $BreakingLookbackHours -FallbackLookbackHours $BreakingFallbackHours -MaxEvents 0 -MaxDiscoveryPasses $breakingPasses
+        & (Join-Path $PSScriptRoot "fetch-breaking-events.ps1") -PrimaryLookbackHours $BreakingLookbackHours -FallbackLookbackHours $BreakingFallbackHours -StrategicRetentionHours 168 -MaxEvents 0 -MaxDiscoveryPasses $breakingPasses -MaxConcurrency 2 -SkipMerge
     }
     if (-not $?) { throw "Breaking-event discovery did not complete." }
     $laneResults += [ordered]@{ lane = "Breaking events"; status = "success"; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
@@ -99,10 +104,10 @@ if ($CatchUp) {
 else {
     try {
         if ($Budget) {
-            & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours 24 -MaxSignals 12 -MaxBatches 1 -Model "grok-4.3" -Economy
+            & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours 24 -MaxSignals 12 -MaxBatches 1 -MaxConcurrency 1 -Model "grok-4.3" -Economy -SkipMerge
         }
         else {
-            & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours $XLookbackHours -MaxSignals 20
+            & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours $XLookbackHours -MaxSignals 20 -MaxConcurrency 2 -SkipMerge
         }
         if (-not $?) { throw "X collection did not complete." }
         $laneResults += [ordered]@{ lane = "X"; status = "success"; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
@@ -120,10 +125,10 @@ else {
 
     try {
         if ($Budget) {
-            & (Join-Path $PSScriptRoot "fetch-substack.ps1") -LimitPerSource 1 -LookbackDays ([Math]::Min(5, $SubstackLookbackDays)) -Model "grok-4.3" -Economy
+            & (Join-Path $PSScriptRoot "fetch-substack.ps1") -LimitPerSource 1 -LookbackDays ([Math]::Min(5, $SubstackLookbackDays)) -Model "grok-4.3" -Economy -SkipMerge
         }
         else {
-            & (Join-Path $PSScriptRoot "fetch-substack.ps1") -LimitPerSource 2 -LookbackDays $SubstackLookbackDays
+            & (Join-Path $PSScriptRoot "fetch-substack.ps1") -LimitPerSource 2 -LookbackDays $SubstackLookbackDays -SkipMerge
         }
         if (-not $?) { throw "Newsletter/RSS collection did not complete." }
         $laneResults += [ordered]@{ lane = "Newsletters / RSS"; status = "success"; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
@@ -142,10 +147,10 @@ else {
 
 try {
     if ($Budget) {
-        & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 75 -CommentaryEventLimit 2 -LookbackDays 3 -CandidatesPerEvent 5 -MinimumCandidatesPerEvent 3 -MaxDiscoveryPasses 1 -Model "grok-4.3" -Economy
+        & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 75 -CommentaryEventLimit 2 -LookbackDays 3 -CandidatesPerEvent 5 -MinimumCandidatesPerEvent 3 -MaxDiscoveryPasses 1 -Model "grok-4.3" -Economy -SkipMerge
     }
     else {
-        & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 70 -CommentaryEventLimit 30 -LookbackDays 7 -CandidatesPerEvent 10 -MinimumCandidatesPerEvent 5 -MaxDiscoveryPasses 2
+        & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 70 -CommentaryEventLimit 12 -LookbackDays 7 -CandidatesPerEvent 10 -MinimumCandidatesPerEvent 5 -MaxDiscoveryPasses 2 -SkipMerge
     }
     if (-not $?) { throw "Commentary enrichment did not complete." }
     $laneResults += [ordered]@{ lane = "Event commentary"; status = "success"; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
@@ -206,8 +211,11 @@ else {
 }
 
 Write-Host "Relevant Posts is current and ready." -ForegroundColor Green
+$budgetSummary = Get-XaiBudgetSummary
+$costLabel = if ([bool]$budgetSummary.costTrackingAvailable) { "`$$([double]$budgetSummary.actualCostUsd)" } else { "not returned by xAI" }
 if ($Budget) {
-    $budgetSummary = Get-XaiBudgetSummary
-    $costLabel = if ([bool]$budgetSummary.costTrackingAvailable) { "`$$([double]$budgetSummary.actualCostUsd)" } else { "not returned by xAI" }
     Write-Host "xAI usage: $($budgetSummary.requestCount) of $($budgetSummary.maximumRequests) requests; cost $costLabel; stop-limit `$$($budgetSummary.maximumUsd)." -ForegroundColor DarkCyan
+}
+else {
+    Write-Host "xAI usage: $($budgetSummary.requestCount) requests; cost $costLabel; elapsed $([Math]::Round(((Get-Date).ToUniversalTime() - $runStartedAt).TotalMinutes, 1)) minutes." -ForegroundColor DarkCyan
 }

@@ -25,6 +25,8 @@ param(
 
     [switch]$Economy,
 
+    [switch]$SkipMerge,
+
     [switch]$ReplayCandidates
 )
 
@@ -63,8 +65,8 @@ $events = @($eventFeed.signals | Where-Object {
     catch { $false }
 } | Sort-Object `
     @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
-    @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true }, `
-    @{ Expression = { [int]$_.score }; Descending = $true } |
+    @{ Expression = { [int]$_.score }; Descending = $true }, `
+    @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true } |
     Select-Object eventKey, title, summary, entities, eventType, publishedAt, url, source, evidenceSummary, score, isBreaking)
 if ($CommentaryEventLimit -gt 0) {
     $events = @($events | Select-Object -First $CommentaryEventLimit)
@@ -79,7 +81,9 @@ if ($events.Count -eq 0) {
         commentaries = @()
     }
     [IO.File]::WriteAllText($outputPath, ($emptyFeed | ConvertTo-Json -Depth 10), $utf8)
-    & (Join-Path $PSScriptRoot "merge-live-feeds.ps1") | Out-Host
+    if (-not $SkipMerge) {
+        & (Join-Path $PSScriptRoot "merge-live-feeds.ps1") | Out-Host
+    }
     return
 }
 
@@ -253,12 +257,13 @@ try {
         $apiKey = Get-XaiApiKey -ProjectRoot $projectRoot
         $checkpointCandidatesByKey = @{}
         $checkpointGradesByKey = @{}
+        $checkpointAgeHours = [double]::PositiveInfinity
         if ((Test-Path -LiteralPath $candidateAuditPath) -and (Test-Path -LiteralPath $gradingAuditPath)) {
             try {
                 $savedCandidateAudit = [IO.File]::ReadAllText($candidateAuditPath) | ConvertFrom-Json
                 $savedGradingAudit = [IO.File]::ReadAllText($gradingAuditPath) | ConvertFrom-Json
                 $checkpointAgeHours = ($nowUtc - ([datetime]$savedCandidateAudit.generatedAt).ToUniversalTime()).TotalHours
-                if ([int]$savedCandidateAudit.pipelineVersion -eq 2 -and [int]$savedGradingAudit.pipelineVersion -eq 2 -and $checkpointAgeHours -le 4) {
+                if ([int]$savedCandidateAudit.pipelineVersion -eq 2 -and [int]$savedGradingAudit.pipelineVersion -eq 2 -and $checkpointAgeHours -le ($LookbackDays * 24)) {
                     foreach ($savedEvent in @($savedCandidateAudit.events)) { $checkpointCandidatesByKey[([string]$savedEvent.eventKey).ToLowerInvariant()] = $savedEvent }
                     foreach ($savedEvent in @($savedGradingAudit.events)) { $checkpointGradesByKey[([string]$savedEvent.eventKey).ToLowerInvariant()] = $savedEvent }
                 }
@@ -268,7 +273,13 @@ try {
         for ($eventIndex = 0; $eventIndex -lt $events.Count; $eventIndex++) {
             $event = $events[$eventIndex]
             $eventKeyLower = ([string]$event.eventKey).ToLowerInvariant()
-            if ($checkpointCandidatesByKey.ContainsKey($eventKeyLower) -and $checkpointGradesByKey.ContainsKey($eventKeyLower)) {
+            $eventAgeHours = ($nowUtc - ([datetime]$event.publishedAt).ToUniversalTime()).TotalHours
+            $checkpointIsFreshEnough = $checkpointAgeHours -le 4 -or $eventAgeHours -gt 24
+            $checkpointHasCandidates = $checkpointCandidatesByKey.ContainsKey($eventKeyLower) -and
+                @($checkpointCandidatesByKey[$eventKeyLower].candidates).Count -gt 0
+            $checkpointHasGrades = $checkpointGradesByKey.ContainsKey($eventKeyLower) -and
+                @($checkpointGradesByKey[$eventKeyLower].grades).Count -gt 0
+            if ($checkpointIsFreshEnough -and $checkpointHasCandidates -and $checkpointHasGrades) {
                 Write-Host "Reusing completed X-search checkpoint - event $($eventIndex + 1) of $($events.Count)..." -ForegroundColor DarkCyan
                 $candidateEvents += $checkpointCandidatesByKey[$eventKeyLower]
                 $gradingEvents += $checkpointGradesByKey[$eventKeyLower]
@@ -647,6 +658,8 @@ $feed = [ordered]@{
 }
 [IO.File]::WriteAllText($outputPath, ($feed | ConvertTo-Json -Depth 20), $utf8)
 
-& (Join-Path $PSScriptRoot "merge-live-feeds.ps1") | Out-Host
+if (-not $SkipMerge) {
+    & (Join-Path $PSScriptRoot "merge-live-feeds.ps1") | Out-Host
+}
 $coveredCount = @($coverage | Where-Object { $_.status -eq "covered" }).Count
 Write-Host "Selected high-quality X commentary for $coveredCount of $($events.Count) verified events; $($rejected.Count) candidates were excluded." -ForegroundColor Green

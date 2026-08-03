@@ -14,6 +14,10 @@ const publisherUrl = new URL("../scripts/publish-dashboard.ps1", import.meta.url
 const refreshUrl = new URL("../scripts/refresh-signal-desk.ps1", import.meta.url);
 const budgetHelperUrl = new URL("../scripts/xai-cost-budget.ps1", import.meta.url);
 const dailyRefreshUrl = new URL("../refresh-and-publish.cmd", import.meta.url);
+const breakingRefreshUrl = new URL("../scripts/fetch-breaking-events.ps1", import.meta.url);
+const xRefreshUrl = new URL("../scripts/fetch-xai-signals.ps1", import.meta.url);
+const mergeUrl = new URL("../scripts/merge-live-feeds.ps1", import.meta.url);
+const commentaryRefreshUrl = new URL("../scripts/fetch-event-commentary.ps1", import.meta.url);
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -251,4 +255,32 @@ test("daily refresh has an enforceable low-cost xAI profile", async () => {
   assert.match(refreshScript, /-Model "grok-4\.3"/);
   assert.match(budgetHelper, /cost_in_usd_ticks/);
   assert.match(budgetHelper, /maximumRequests/);
+});
+
+test("full refresh is bounded, adaptive, measurable, and rebuilt once", async () => {
+  const [refreshScript, breakingScript, xScript, commentaryScript, mergeScript, budgetHelper] = await Promise.all([
+    readFile(refreshUrl, "utf8"),
+    readFile(breakingRefreshUrl, "utf8"),
+    readFile(xRefreshUrl, "utf8"),
+    readFile(commentaryRefreshUrl, "utf8"),
+    readFile(mergeUrl, "utf8"),
+    readFile(budgetHelperUrl, "utf8"),
+  ]);
+
+  assert.match(refreshScript, /-CommentaryEventLimit 12\b/);
+  assert.match(refreshScript, /-MaxConcurrency 2\b/);
+  assert.match(refreshScript, /-StrategicRetentionHours 168\b/);
+  assert.match(refreshScript, /Initialize-XaiCostBudget[^\r\n]+-TrackOnly/);
+  assert.ok((refreshScript.match(/-SkipMerge\b/g) ?? []).length >= 4);
+  assert.equal((refreshScript.match(/merge-live-feeds\.ps1/g) ?? []).length, 1);
+
+  assert.match(breakingScript, /Invoke-XaiResponseBatch/);
+  assert.match(breakingScript, /coverageNeedsGapAudit/);
+  assert.doesNotMatch(breakingScript, /requiresExhaustivePasses/);
+  assert.match(xScript, /Invoke-XaiResponseBatch/);
+  assert.match(commentaryScript, /checkpointAgeHours -le \(\$LookbackDays \* 24\)/);
+  assert.match(commentaryScript, /checkpointHasCandidates/);
+  assert.match(budgetHelper, /enforceLimits/);
+  assert.match(mergeScript, /strategicRetentionHours/);
+  assert.match(mergeScript, /isStrategic/);
 });

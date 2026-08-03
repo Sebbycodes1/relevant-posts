@@ -18,7 +18,8 @@ function Initialize-XaiCostBudget {
         [string]$ProjectRoot,
         [double]$MaximumUsd = 1.00,
         [int]$MaximumRequests = 8,
-        [double]$ReservePerRequestUsd = 0.10
+        [double]$ReservePerRequestUsd = 0.10,
+        [switch]$TrackOnly
     )
     $path = Join-Path $ProjectRoot "work\xai-refresh-budget.json"
     New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
@@ -27,6 +28,7 @@ function Initialize-XaiCostBudget {
         maximumUsd = [Math]::Round($MaximumUsd, 4)
         maximumRequests = $MaximumRequests
         reservePerRequestUsd = [Math]::Round($ReservePerRequestUsd, 4)
+        enforceLimits = -not [bool]$TrackOnly
         requestCount = 0
         actualCostUsd = 0.0
         costTrackingAvailable = $true
@@ -42,6 +44,7 @@ function Assert-XaiBudgetAvailable {
     param([string]$Stage)
     $state = Get-XaiBudgetState
     if (-not $state) { return }
+    if ($state.PSObject.Properties["enforceLimits"] -and -not [bool]$state.enforceLimits) { return }
     $requestsUsed = [int]$state.requestCount
     $spent = [double]$state.actualCostUsd
     $reserve = [double]$state.reservePerRequestUsd
