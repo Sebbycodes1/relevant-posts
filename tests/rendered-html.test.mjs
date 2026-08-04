@@ -271,6 +271,8 @@ test("full refresh is bounded, adaptive, measurable, and rebuilt once", async ()
   assert.match(refreshScript, /-MaxConcurrency 2\b/);
   assert.match(refreshScript, /-StrategicRetentionHours 168\b/);
   assert.match(refreshScript, /Initialize-XaiCostBudget[^\r\n]+-TrackOnly/);
+  assert.match(refreshScript, /Test-IsXaiUnavailable/);
+  assert.match(refreshScript, /\$CatchUp -or \$xaiUnavailable/);
   assert.ok((refreshScript.match(/-SkipMerge\b/g) ?? []).length >= 4);
   assert.equal((refreshScript.match(/merge-live-feeds\.ps1/g) ?? []).length, 1);
 

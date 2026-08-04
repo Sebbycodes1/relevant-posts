@@ -34,6 +34,7 @@ $statusPath = Join-Path $projectRoot "work\last-refresh-status.json"
 $runStartedAt = (Get-Date).ToUniversalTime()
 $failures = @()
 $laneResults = @()
+$xaiUnavailable = $false
 . (Join-Path $PSScriptRoot "xai-cost-budget.ps1")
 if ($Budget) {
     $null = Initialize-XaiCostBudget -ProjectRoot $projectRoot -MaximumUsd $MaxXaiSpendUsd -MaximumRequests $MaxXaiRequests
@@ -46,6 +47,11 @@ else {
 function Test-IsBudgetStop {
     param([string]$Message)
     return $Budget -and $Message -match 'xAI refresh budget was reached'
+}
+
+function Test-IsXaiUnavailable {
+    param([string]$Message)
+    return $Message -match 'used all available credits|monthly spending limit|permission-denied'
 }
 
 function Write-RefreshStatus {
@@ -92,14 +98,16 @@ catch {
     }
     else {
         $failures += "Breaking events: $($_.Exception.Message)"
+        if (Test-IsXaiUnavailable $_.Exception.Message) { $xaiUnavailable = $true }
         $laneResults += [ordered]@{ lane = "Breaking events"; status = "failed"; message = $_.Exception.Message; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
         Write-Warning "The broad event scan failed; the other sources will still refresh."
     }
 }
 
-if ($CatchUp) {
-    $laneResults += [ordered]@{ lane = "X"; status = "retained"; message = "Using the morning X account scan."; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
-    $laneResults += [ordered]@{ lane = "Newsletters / RSS"; status = "retained"; message = "Using the morning newsletter/RSS scan."; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
+if ($CatchUp -or $xaiUnavailable) {
+    $retainedReason = if ($xaiUnavailable) { "xAI is unavailable; retaining the last complete snapshot." } else { "Using the morning snapshot." }
+    $laneResults += [ordered]@{ lane = "X"; status = "retained"; message = $retainedReason; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
+    $laneResults += [ordered]@{ lane = "Newsletters / RSS"; status = "retained"; message = $retainedReason; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
 }
 else {
     try {
@@ -145,6 +153,10 @@ else {
     }
 }
 
+if ($xaiUnavailable) {
+    $laneResults += [ordered]@{ lane = "Event commentary"; status = "retained"; message = "xAI is unavailable; retaining the last complete snapshot."; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
+}
+else {
 try {
     if ($Budget) {
         & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 75 -CommentaryEventLimit 2 -LookbackDays 3 -CandidatesPerEvent 5 -MinimumCandidatesPerEvent 3 -MaxDiscoveryPasses 1 -Model "grok-4.3" -Economy -SkipMerge
@@ -165,6 +177,7 @@ catch {
         $laneResults += [ordered]@{ lane = "Event commentary"; status = "failed"; message = $_.Exception.Message; completedAt = (Get-Date).ToUniversalTime().ToString("o") }
         Write-Warning "The commentary refresh failed; verified primary sources will remain available."
     }
+}
 }
 
 try {
