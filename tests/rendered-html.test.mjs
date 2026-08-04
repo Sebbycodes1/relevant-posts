@@ -285,4 +285,7 @@ test("full refresh is bounded, adaptive, measurable, and rebuilt once", async ()
   assert.match(budgetHelper, /enforceLimits/);
   assert.match(mergeScript, /strategicRetentionHours/);
   assert.match(mergeScript, /isStrategic/);
+  assert.match(mergeScript, /visibleLookbackHours = 48/);
+  assert.match(refreshScript, /BreakingFallbackHours = 48/);
+  assert.match(refreshScript, /-LookbackDays 2\b/);
 });

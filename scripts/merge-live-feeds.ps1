@@ -10,6 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $nowUtc = (Get-Date).ToUniversalTime()
+$visibleLookbackHours = 48
 if (-not $BreakingFeedPath) { $BreakingFeedPath = Join-Path $projectRoot "outputs\live-breaking-feed.json" }
 if (-not $CommentaryFeedPath) { $CommentaryFeedPath = Join-Path $projectRoot "outputs\live-commentary-feed.json" }
 if (-not $XFeedPath) { $XFeedPath = Join-Path $projectRoot "outputs\live-x-feed.json" }
@@ -141,18 +142,11 @@ $strategicRetentionHours = 168
 if (Test-Path -LiteralPath $BreakingFeedPath) {
     $breakingFeed = [IO.File]::ReadAllText($BreakingFeedPath) | ConvertFrom-Json
     $fallbackRetentionHours = if ($breakingFeed.PSObject.Properties["fallbackLookbackHours"]) { [int]$breakingFeed.fallbackLookbackHours } else { 72 }
-    $strategicRetentionHours = if ($breakingFeed.PSObject.Properties["strategicRetentionHours"]) { [int]$breakingFeed.strategicRetentionHours } else { 168 }
     $breakingSignals = @($breakingFeed.signals | Where-Object {
         try {
             $publishedUtc = ([datetime]$_.publishedAt).ToUniversalTime()
-            $dateOnly = $publishedUtc.TimeOfDay.TotalMinutes -eq 0
-            $normalMaximumAge = if ($dateOnly) { $fallbackRetentionHours + 24 } else { $fallbackRetentionHours + 8 }
-            $strategicMaximumAge = if ($dateOnly) { $strategicRetentionHours + 24 } else { $strategicRetentionHours + 8 }
             $ageHours = ($nowUtc - $publishedUtc).TotalHours
-            $ageHours -le $normalMaximumAge -or (
-                $ageHours -le $strategicMaximumAge -and [bool]$_.mustInclude -and
-                [bool]$_.hasPrimaryEvidence -and [int]$_.score -ge 82
-            )
+            $ageHours -ge -2 -and $ageHours -le $visibleLookbackHours
         }
         catch { $false }
     })
@@ -198,6 +192,15 @@ if (Test-Path -LiteralPath $CommentaryFeedPath) {
     }
 }
 if ($allSignals.Count -eq 0) { throw "No live signals are available to merge." }
+$allSignals = @($allSignals | Where-Object {
+    try {
+        $publishedUtc = ([datetime]$_.publishedAt).ToUniversalTime()
+        $ageHours = ($nowUtc - $publishedUtc).TotalHours
+        $ageHours -ge -2 -and $ageHours -le $visibleLookbackHours
+    }
+    catch { $false }
+})
+if ($allSignals.Count -eq 0) { throw "No signals were published inside the strict 48-hour recency window." }
 $allSignals = @($allSignals | Where-Object { -not ($_.eventType -eq "other" -and [int]$_.score -lt 70) })
 if ($allSignals.Count -eq 0) { throw "No live signals cleared the event classification policy." }
 
@@ -207,8 +210,7 @@ foreach ($item in $allSignals) {
         $eventPublishedUtc = ([datetime]$item.publishedAt).ToUniversalTime()
         $eventAgeHours = ($nowUtc - $eventPublishedUtc).TotalHours
         Set-ObjectProperty $item "isBreaking" ($eventAgeHours -ge 0 -and $eventAgeHours -le 24 -and [int]$item.score -ge 80)
-        $isStrategic = $eventAgeHours -gt 24 -and $eventAgeHours -le $strategicRetentionHours -and [int]$item.score -ge 82 -and [bool]$item.hasPrimaryEvidence
-        Set-ObjectProperty $item "isStrategic" $isStrategic
+        Set-ObjectProperty $item "isStrategic" $false
         Set-ObjectProperty $item "discoveryWindowHours" $(if ($eventAgeHours -le 24) { 24 } elseif ($eventAgeHours -le $fallbackRetentionHours) { $fallbackRetentionHours } else { $strategicRetentionHours })
     }
     catch {
@@ -218,7 +220,6 @@ foreach ($item in $allSignals) {
 
 $rankedSignals = @($allSignals | Sort-Object `
     @{ Expression = { if ([bool]$_.isBreaking) { 1 } else { 0 } }; Descending = $true }, `
-    @{ Expression = { if ([bool]$_.isStrategic) { 1 } else { 0 } }; Descending = $true }, `
     @{ Expression = { Get-FreshnessPriority $_ }; Descending = $true }, `
     @{ Expression = { [int]$_.score }; Descending = $true }, `
     @{ Expression = { try { ([datetime]$_.publishedAt).Ticks } catch { 0 } }; Descending = $true }, `

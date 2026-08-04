@@ -4,7 +4,7 @@ param(
     [int]$MinimumCommentaryScore = 70,
 
     [ValidateRange(1, 14)]
-    [int]$LookbackDays = 7,
+    [int]$LookbackDays = 2,
 
     [ValidateRange(5, 15)]
     [int]$CandidatesPerEvent = 10,

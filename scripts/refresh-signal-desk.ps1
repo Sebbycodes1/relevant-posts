@@ -4,7 +4,7 @@ param(
     [int]$BreakingLookbackHours = 24,
 
     [ValidateRange(24, 168)]
-    [int]$BreakingFallbackHours = 72,
+    [int]$BreakingFallbackHours = 48,
 
     [ValidateRange(1, 168)]
     [int]$XLookbackHours = 48,
@@ -162,7 +162,7 @@ try {
         & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 75 -CommentaryEventLimit 2 -LookbackDays 3 -CandidatesPerEvent 5 -MinimumCandidatesPerEvent 3 -MaxDiscoveryPasses 1 -Model "grok-4.3" -Economy -SkipMerge
     }
     else {
-        & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 70 -CommentaryEventLimit 12 -LookbackDays 7 -CandidatesPerEvent 10 -MinimumCandidatesPerEvent 5 -MaxDiscoveryPasses 2 -SkipMerge
+        & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 70 -CommentaryEventLimit 12 -LookbackDays 2 -CandidatesPerEvent 10 -MinimumCandidatesPerEvent 5 -MaxDiscoveryPasses 2 -SkipMerge
     }
     if (-not $?) { throw "Commentary enrichment did not complete." }
     $laneResults += [ordered]@{ lane = "Event commentary"; status = "success"; completedAt = (Get-Date).ToUniversalTime().ToString("o") }

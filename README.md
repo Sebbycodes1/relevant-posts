@@ -22,12 +22,12 @@ The refresh is manual by design for the prototype. Every run records the exact p
 ## What the refresh does
 
 1. **Broad event discovery:** runs separate searches for models/labs, semiconductors, infrastructure, hyperscalers, policy and market-moving capital or earnings, plus a deterministic official-source catalyst watchlist. Independent lanes run two at a time; a second pass and cross-lane gap audit run only when verified coverage is actually thin.
-2. **Primary-source verification:** uses X attention to find developments, then requires a direct official source before an event can enter the feed. The scan starts with 24 hours and falls back to 72 hours.
+2. **Primary-source verification:** uses X attention to find developments, then requires a direct official source before an event can enter the feed. The scan starts with 24 hours and may search back 48 hours for coverage completeness.
 3. **Curated X and newsletter monitoring:** reviews configured high-signal accounts and specialist publications without limiting broad discovery to that source list.
 4. **Event-specific X search:** searches every verified event independently using names, entities, metrics, links, semantic variants and quote posts. Thin searches are retried automatically.
 5. **Independent commentary grading:** separates candidate discovery from grading, rejects pre-announcement posts and repetition, then applies a deterministic quality score that favors evidence, insight, independence and recency.
 6. **Coverage and source learning:** records which events lacked useful commentary and gradually promotes unfamiliar accounts only after multiple distinct posts clear the quality screen.
-7. **Event memory and ranking:** retains current events through imperfect refreshes and keeps only exceptionally material, primary-verified stories (82+) on a seven-day strategic shelf. Breaking news remains first, duplicates are clustered, and the dashboard is rebuilt once after all collection lanes finish.
+7. **Strict recency and ranking:** the visible dashboard contains only signals published in the last 48 hours. Breaking news remains first, duplicates are clustered, and older verified events stay only in local audit history rather than occupying the live feed.
 
 The visible dashboard remains a single ranked feed. Detailed evidence and score components are available only when expanded.
 
