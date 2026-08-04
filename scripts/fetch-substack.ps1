@@ -13,6 +13,9 @@ param(
     [ValidateRange(5, 60)]
     [int]$MaxCandidates = 30,
 
+    [ValidateRange(1, 4)]
+    [int]$MaxConcurrency = 2,
+
     [switch]$CollectOnly,
 
     [switch]$SkipMerge
@@ -467,7 +470,7 @@ try {
         }
     }
     Write-Host "Scoring recent newsletter and RSS articles in $($batchRequests.Count) bounded batch(es)..." -ForegroundColor Cyan
-    $batchResults = Invoke-XaiResponseBatch -Requests $batchRequests -ApiKey $apiKey -MaxConcurrency 2 -TimeoutSeconds 420
+    $batchResults = Invoke-XaiResponseBatch -Requests $batchRequests -ApiKey $apiKey -MaxConcurrency $MaxConcurrency -TimeoutSeconds 420
 }
 catch {
     throw "Newsletter/RSS scoring failed. $($_.Exception.Message)"

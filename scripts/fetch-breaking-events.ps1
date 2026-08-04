@@ -22,6 +22,8 @@ param(
 
     [switch]$Economy,
 
+    [switch]$Balanced,
+
     [switch]$SkipGapAudit,
 
     [ValidateRange(1, 4)]
@@ -34,6 +36,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+
+if ($Economy -and $Balanced) {
+    throw "Choose either Economy or Balanced breaking-event discovery, not both."
+}
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $outputPath = Join-Path $projectRoot "outputs\live-breaking-feed.json"
@@ -150,6 +156,25 @@ $catalystChecklist
         }
     )
 }
+elseif ($Balanced) {
+    $laneCandidateLimit = 18
+    $discoveryLanes = @(
+        [pscustomobject]@{
+            name = "Balanced capabilities policy and open ecosystem"
+            focus = @"
+Run a comprehensive major-event scan across frontier and open-weight models, laboratories, model cards and repositories, benchmark-changing research, AI policy and regulation, standards, public letters, coordinated industry positions, and material open-source developments. Inspect official laboratory sources, Hugging Face, GitHub, government or regulator pages, and broad X discussion. Do not fill the results with routine product promotion.
+"@
+        },
+        [pscustomobject]@{
+            name = "Balanced compute infrastructure and AI economics"
+            focus = @"
+Run a comprehensive major-event scan across accelerators, custom silicon, memory and HBM, foundry and packaging, servers and networking, datacenters, energy and cooling, hyperscalers, enterprise AI, earnings, financings, supply or capacity commitments, and measurable customer or capital disclosures. Check the official-source watchlist below for same-day catalysts and include smaller public-company suppliers when the development is genuinely material.
+
+$catalystChecklist
+"@
+        }
+    )
+}
 
 $prompt = @"
 You are the breaking-events editor for an institutional asset-management AI intelligence feed.
@@ -254,7 +279,7 @@ $requestBody = [ordered]@{
         },
         [ordered]@{ type = "web_search" }
     )
-    max_turns = if ($Economy) { 4 } else { 8 }
+    max_turns = if ($Economy) { 4 } elseif ($Balanced) { 6 } else { 8 }
     text = [ordered]@{
         format = [ordered]@{
             type = "json_schema"
@@ -263,7 +288,7 @@ $requestBody = [ordered]@{
             strict = $true
         }
     }
-    max_output_tokens = if ($Economy) { 6000 } else { 9000 }
+    max_output_tokens = if ($Economy) { 6000 } elseif ($Balanced) { 7500 } else { 9000 }
     store = $false
 }
 
@@ -282,7 +307,7 @@ else {
             $checkpoint = [IO.File]::ReadAllText($discoveryCheckpointPath) | ConvertFrom-Json
             $checkpointAgeHours = ($nowUtc - ([datetime]$checkpoint.generatedAt).ToUniversalTime()).TotalHours
             $checkpointProfile = if ($checkpoint.PSObject.Properties["profile"]) { [string]$checkpoint.profile } else { "full" }
-            $requestedProfile = if ($Economy) { "economy" } else { "full" }
+            $requestedProfile = if ($Economy) { "economy" } elseif ($Balanced) { "balanced" } else { "full" }
             if ($checkpointAgeHours -ge 0 -and $checkpointAgeHours -le 4 -and $checkpointProfile -eq $requestedProfile -and
                 [int]$checkpoint.primaryLookbackHours -eq $PrimaryLookbackHours -and
                 [int]$checkpoint.fallbackLookbackHours -eq $FallbackLookbackHours -and
@@ -303,7 +328,7 @@ else {
         param([bool]$GapAuditCompleted = $false)
         $checkpointPayload = [ordered]@{
             generatedAt = $nowUtc.ToString("o")
-            profile = if ($Economy) { "economy" } else { "full" }
+            profile = if ($Economy) { "economy" } elseif ($Balanced) { "balanced" } else { "full" }
             primaryLookbackHours = $PrimaryLookbackHours
             fallbackLookbackHours = $FallbackLookbackHours
             maxDiscoveryPasses = $MaxDiscoveryPasses
@@ -362,7 +387,7 @@ else {
 
             if ($requests.Count -eq 0) { break }
             Write-Host "Scanning $($requests.Count) breaking-event lanes in bounded parallel batches, pass $pass..." -ForegroundColor Cyan
-            $batchResults = Invoke-XaiResponseBatch -Requests $requests -ApiKey $apiKey -MaxConcurrency $(if ($Economy) { 1 } else { $MaxConcurrency }) -TimeoutSeconds 420
+            $batchResults = Invoke-XaiResponseBatch -Requests $requests -ApiKey $apiKey -MaxConcurrency $(if ($Economy -or $Balanced) { 1 } else { $MaxConcurrency }) -TimeoutSeconds 420
             foreach ($batchResult in $batchResults) {
                 $state = $laneStates[[string]$batchResult.Key]
                 $response = $batchResult.Response
@@ -687,7 +712,7 @@ foreach ($item in @($result.candidates)) {
 
 $newAcceptedCount = $accepted.Count
 if ($newAcceptedCount -eq 0) {
-    if ($Economy) {
+    if ($Economy -or $Balanced) {
         Write-Host "No new verified major event was found; publishing a current quiet-lane snapshot." -ForegroundColor DarkCyan
     }
     else {

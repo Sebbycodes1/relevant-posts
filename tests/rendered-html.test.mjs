@@ -14,6 +14,8 @@ const publisherUrl = new URL("../scripts/publish-dashboard.ps1", import.meta.url
 const refreshUrl = new URL("../scripts/refresh-signal-desk.ps1", import.meta.url);
 const budgetHelperUrl = new URL("../scripts/xai-cost-budget.ps1", import.meta.url);
 const dailyRefreshUrl = new URL("../refresh-and-publish.cmd", import.meta.url);
+const balancedRefreshUrl = new URL("../refresh-and-publish-balanced.cmd", import.meta.url);
+const fullRefreshUrl = new URL("../refresh-and-publish-full.cmd", import.meta.url);
 const breakingRefreshUrl = new URL("../scripts/fetch-breaking-events.ps1", import.meta.url);
 const xRefreshUrl = new URL("../scripts/fetch-xai-signals.ps1", import.meta.url);
 const mergeUrl = new URL("../scripts/merge-live-feeds.ps1", import.meta.url);
@@ -258,6 +260,29 @@ test("daily refresh has an enforceable low-cost xAI profile", async () => {
   assert.match(refreshScript, /-Model "grok-4\.3"/);
   assert.match(budgetHelper, /cost_in_usd_ticks/);
   assert.match(budgetHelper, /maximumRequests/);
+});
+
+test("balanced refresh preserves broad coverage behind a four-dollar serial stop-limit", async () => {
+  const [refreshScript, breakingScript, newsletterScript, balancedRefresh, fullRefresh] = await Promise.all([
+    readFile(refreshUrl, "utf8"),
+    readFile(breakingRefreshUrl, "utf8"),
+    readFile(newsletterRefreshUrl, "utf8"),
+    readFile(balancedRefreshUrl, "utf8"),
+    readFile(fullRefreshUrl, "utf8"),
+  ]);
+
+  assert.match(balancedRefresh, /-Balanced\b/);
+  assert.match(balancedRefresh, /-MaxXaiSpendUsd 4\.00/);
+  assert.match(balancedRefresh, /-MaxXaiRequests 16/);
+  assert.doesNotMatch(fullRefresh, /-Balanced\b/);
+  assert.match(refreshScript, /-ReservePerRequestUsd 0\.75/);
+  assert.match(refreshScript, /-CommentaryEventLimit 3\b/);
+  assert.match(refreshScript, /-MaxCandidates 25\b/);
+  assert.match(refreshScript, /-LookbackHours 36\b/);
+  assert.match(breakingScript, /Balanced capabilities policy and open ecosystem/);
+  assert.match(breakingScript, /Balanced compute infrastructure and AI economics/);
+  assert.match(breakingScript, /profile = if \(\$Economy\) \{ "economy" \} elseif \(\$Balanced\) \{ "balanced" \}/);
+  assert.match(newsletterScript, /-MaxConcurrency \$MaxConcurrency/);
 });
 
 test("full refresh is bounded, adaptive, measurable, and rebuilt once", async () => {

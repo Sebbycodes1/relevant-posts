@@ -16,6 +16,8 @@ param(
 
     [switch]$Budget,
 
+    [switch]$Balanced,
+
     [ValidateRange(0.25, 100.0)]
     [double]$MaxXaiSpendUsd = 1.00,
 
@@ -36,7 +38,14 @@ $failures = @()
 $laneResults = @()
 $xaiUnavailable = $false
 . (Join-Path $PSScriptRoot "xai-cost-budget.ps1")
-if ($Budget) {
+if ($Balanced -and ($Budget -or $CatchUp)) {
+    throw "Balanced cannot be combined with Budget or CatchUp."
+}
+if ($Balanced) {
+    # Paid calls are serialized in this profile, so the budget is rechecked after every response.
+    $null = Initialize-XaiCostBudget -ProjectRoot $projectRoot -MaximumUsd $MaxXaiSpendUsd -MaximumRequests $MaxXaiRequests -ReservePerRequestUsd 0.75
+}
+elseif ($Budget) {
     $null = Initialize-XaiCostBudget -ProjectRoot $projectRoot -MaximumUsd $MaxXaiSpendUsd -MaximumRequests $MaxXaiRequests
 }
 else {
@@ -46,7 +55,7 @@ else {
 
 function Test-IsBudgetStop {
     param([string]$Message)
-    return $Budget -and $Message -match 'xAI refresh budget was reached'
+    return ($Budget -or $Balanced) -and $Message -match 'xAI refresh budget was reached'
 }
 
 function Test-IsXaiUnavailable {
@@ -69,7 +78,7 @@ function Write-RefreshStatus {
         completedAt = (Get-Date).ToUniversalTime().ToString("o")
         published = $Published
         publishMessage = $PublishMessage
-        profile = if ($Budget) { "budget" } elseif ($CatchUp) { "catch_up" } else { "full" }
+        profile = if ($Balanced) { "balanced" } elseif ($Budget) { "budget" } elseif ($CatchUp) { "catch_up" } else { "full" }
         elapsedMinutes = [Math]::Round(((Get-Date).ToUniversalTime() - $runStartedAt).TotalMinutes, 2)
         xaiUsage = Get-XaiBudgetSummary
         failures = $failures
@@ -82,9 +91,12 @@ function Write-RefreshStatus {
 Write-Host "Refreshing Relevant Posts..." -ForegroundColor Cyan
 
 try {
-    $breakingPasses = if ($CatchUp -or $Budget) { 1 } else { 2 }
+    $breakingPasses = if ($CatchUp -or $Budget -or $Balanced) { 1 } else { 2 }
     if ($Budget) {
         & (Join-Path $PSScriptRoot "fetch-breaking-events.ps1") -PrimaryLookbackHours $BreakingLookbackHours -FallbackLookbackHours $BreakingFallbackHours -StrategicRetentionHours 168 -MaxEvents 0 -MaxDiscoveryPasses 1 -MaxConcurrency 1 -Model "grok-4.3" -Economy -SkipGapAudit -SkipMerge
+    }
+    elseif ($Balanced) {
+        & (Join-Path $PSScriptRoot "fetch-breaking-events.ps1") -PrimaryLookbackHours $BreakingLookbackHours -FallbackLookbackHours $BreakingFallbackHours -StrategicRetentionHours 168 -MaxEvents 0 -MaxDiscoveryPasses 1 -MaxConcurrency 1 -Model "grok-4.3" -Balanced -SkipGapAudit -SkipMerge
     }
     else {
         & (Join-Path $PSScriptRoot "fetch-breaking-events.ps1") -PrimaryLookbackHours $BreakingLookbackHours -FallbackLookbackHours $BreakingFallbackHours -StrategicRetentionHours 168 -MaxEvents 0 -MaxDiscoveryPasses $breakingPasses -MaxConcurrency 2 -SkipMerge
@@ -114,6 +126,9 @@ else {
         if ($Budget) {
             & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours 24 -MaxSignals 12 -MaxBatches 1 -MaxConcurrency 1 -Model "grok-4.3" -Economy -SkipMerge
         }
+        elseif ($Balanced) {
+            & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours 36 -MaxSignals 16 -MaxBatches 1 -MaxConcurrency 1 -Model "grok-4.3" -Economy -SkipMerge
+        }
         else {
             & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours $XLookbackHours -MaxSignals 20 -MaxConcurrency 2 -SkipMerge
         }
@@ -133,7 +148,10 @@ else {
 
     try {
         if ($Budget) {
-            & (Join-Path $PSScriptRoot "fetch-substack.ps1") -LimitPerSource 1 -LookbackDays ([Math]::Min(5, $SubstackLookbackDays)) -Model "grok-4.3" -Economy -SkipMerge
+            & (Join-Path $PSScriptRoot "fetch-substack.ps1") -LimitPerSource 1 -LookbackDays ([Math]::Min(5, $SubstackLookbackDays)) -MaxConcurrency 1 -Model "grok-4.3" -Economy -SkipMerge
+        }
+        elseif ($Balanced) {
+            & (Join-Path $PSScriptRoot "fetch-substack.ps1") -LimitPerSource 2 -LookbackDays $SubstackLookbackDays -MaxCandidates 25 -MaxConcurrency 1 -Model "grok-4.3" -Economy -SkipMerge
         }
         else {
             & (Join-Path $PSScriptRoot "fetch-substack.ps1") -LimitPerSource 2 -LookbackDays $SubstackLookbackDays -SkipMerge
@@ -160,6 +178,9 @@ else {
 try {
     if ($Budget) {
         & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 75 -CommentaryEventLimit 2 -LookbackDays 3 -CandidatesPerEvent 5 -MinimumCandidatesPerEvent 3 -MaxDiscoveryPasses 1 -Model "grok-4.3" -Economy -SkipMerge
+    }
+    elseif ($Balanced) {
+        & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 75 -CommentaryEventLimit 3 -LookbackDays 2 -CandidatesPerEvent 7 -MinimumCandidatesPerEvent 4 -MaxDiscoveryPasses 1 -Model "grok-4.3" -Economy -SkipMerge
     }
     else {
         & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 70 -CommentaryEventLimit 12 -LookbackDays 2 -CandidatesPerEvent 10 -MinimumCandidatesPerEvent 5 -MaxDiscoveryPasses 2 -SkipMerge
@@ -226,7 +247,7 @@ else {
 Write-Host "Relevant Posts is current and ready." -ForegroundColor Green
 $budgetSummary = Get-XaiBudgetSummary
 $costLabel = if ([bool]$budgetSummary.costTrackingAvailable) { "`$$([double]$budgetSummary.actualCostUsd)" } else { "not returned by xAI" }
-if ($Budget) {
+if ($Budget -or $Balanced) {
     Write-Host "xAI usage: $($budgetSummary.requestCount) of $($budgetSummary.maximumRequests) requests; cost $costLabel; stop-limit `$$($budgetSummary.maximumUsd)." -ForegroundColor DarkCyan
 }
 else {

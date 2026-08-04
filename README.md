@@ -6,18 +6,18 @@ Relevant Posts is a locally refreshed AI intelligence feed for asset-management 
 
 ### Refresh and publish
 
-1. In the morning, double-click `refresh-and-publish-full.cmd` for the complete curated edition. Independent discovery requests run in bounded pairs, while quality gates and source verification remain unchanged.
+1. In the morning, double-click `refresh-and-publish-balanced.cmd` for the recommended curated edition. It preserves complete category coverage, scans all vetted newsletters, and limits expensive event commentary to the top three verified events. Paid requests run serially and stop near a $4 run limit.
 2. Leave the window open while the source passes and quality checks run.
 3. If every source lane succeeds, the workflow updates the shared GitHub Pages dashboard automatically.
 4. After major afternoon earnings or announcements, double-click `refresh-and-publish-catch-up.cmd`. This lighter pass retains the morning account and newsletter scans, with a five-request / $0.60 stop-limit.
 
-`refresh-and-publish.cmd` remains available as the low-cost fallback: it uses the lower-cost model, makes no more than eight xAI requests and stops near a $1 run limit.
+`refresh-and-publish.cmd` remains available as the low-cost fallback: it uses one consolidated discovery scan, makes no more than eight xAI requests and stops near a $1 run limit. `refresh-and-publish-full.cmd` remains the unrestricted deep-scan option for presentation days or a difficult news cycle.
 
 The public page is never changed after a partial or failed refresh. The command requires the local xAI key to be configured and this repository to be signed in to GitHub.
 
 For a local-only update, double-click `outputs\refresh-relevant-posts.cmd`. The resulting dashboard opens as `outputs\signal-desk-live.html` without changing the shared link.
 
-The refresh is manual by design for the prototype. Every run records the exact per-request cost returned by xAI in `work\xai-refresh-budget.json`; budget runs also enforce their configured stop limits. The last successful result from an individual source lane is retained if another lane fails.
+The refresh is manual by design for the prototype. Every run records the exact per-request cost returned by xAI in `work\xai-refresh-budget.json`; balanced and budget runs also enforce their configured stop limits. xAI reports the exact cost only after a request completes, so the final request can cause a small overshoot; serial execution prevents multiple requests from doing so at once. The last successful result from an individual source lane is retained if another lane fails.
 
 ## What the refresh does
 
