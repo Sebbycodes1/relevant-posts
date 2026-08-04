@@ -19,10 +19,11 @@ function Initialize-XaiCostBudget {
         [double]$MaximumUsd = 1.00,
         [int]$MaximumRequests = 8,
         [double]$ReservePerRequestUsd = 0.10,
+        [string]$Path,
         [switch]$TrackOnly
     )
-    $path = Join-Path $ProjectRoot "work\xai-refresh-budget.json"
-    New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
+    $budgetPath = if ($Path) { $Path } else { Join-Path $ProjectRoot "work\xai-refresh-budget.json" }
+    New-Item -ItemType Directory -Path (Split-Path -Parent $budgetPath) -Force | Out-Null
     $state = [ordered]@{
         startedAt = (Get-Date).ToUniversalTime().ToString("o")
         maximumUsd = [Math]::Round($MaximumUsd, 4)
@@ -35,9 +36,9 @@ function Initialize-XaiCostBudget {
         stoppedByBudget = $false
         requests = @()
     }
-    $env:RELEVANT_POSTS_XAI_BUDGET_PATH = $path
+    $env:RELEVANT_POSTS_XAI_BUDGET_PATH = $budgetPath
     Save-XaiBudgetState $state
-    return $path
+    return $budgetPath
 }
 
 function Assert-XaiBudgetAvailable {

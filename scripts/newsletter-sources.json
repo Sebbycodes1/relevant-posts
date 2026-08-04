@@ -1,0 +1,377 @@
+[
+  {
+    "name": "SemiAnalysis",
+    "feedUrl": "https://newsletter.semianalysis.com/feed",
+    "tier": "core",
+    "coverage": "AI semiconductors, memory, datacenters and supply-chain research",
+    "accessPolicy": "mixed",
+    "dailyLimit": 2,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Specialist primary-channel research with unusually deep technical and supply-chain work; estimates remain labeled as research rather than issuer confirmation.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://newsletter.semianalysis.com/"]
+    }
+  },
+  {
+    "name": "Interconnects",
+    "feedUrl": "https://www.interconnects.ai/feed",
+    "tier": "core",
+    "coverage": "Frontier-model strategy, economics and open-model ecosystems",
+    "accessPolicy": "mixed",
+    "dailyLimit": 2,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Technically literate model-industry analysis with a consistent authorial track record and low promotional volume.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.interconnects.ai/about"]
+    }
+  },
+  {
+    "name": "Import AI",
+    "feedUrl": "https://importai.substack.com/feed",
+    "tier": "context",
+    "coverage": "AI research, capabilities and policy synthesis",
+    "accessPolicy": "free",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Long-running research synthesis written by an experienced frontier-lab policy practitioner; useful for context, not breaking confirmation.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://importai.substack.com/about"]
+    }
+  },
+  {
+    "name": "Fabricated Knowledge",
+    "feedUrl": "https://www.fabricatedknowledge.com/feed",
+    "tier": "core",
+    "coverage": "Semiconductor companies, manufacturing and investing",
+    "accessPolicy": "mixed",
+    "dailyLimit": 2,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Focused semiconductor analysis with company and process detail; admitted as analysis and capped below primary evidence.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.fabricatedknowledge.com/about"]
+    }
+  },
+  {
+    "name": "Asianometry",
+    "feedUrl": "https://www.asianometry.com/feed",
+    "tier": "context",
+    "coverage": "Asian semiconductor, industrial and technology history",
+    "accessPolicy": "mixed",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Detailed industrial and semiconductor history that adds supply-chain context; slower cadence and context-only treatment reduce noise.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.asianometry.com/about"]
+    }
+  },
+  {
+    "name": "Latent Space",
+    "feedUrl": "https://www.latent.space/feed",
+    "tier": "core",
+    "coverage": "AI engineering, model releases and infrastructure",
+    "accessPolicy": "mixed",
+    "dailyLimit": 2,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Practitioner-oriented AI engineering coverage with direct technical links; roundup items face a higher admission threshold.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.latent.space/about"]
+    }
+  },
+  {
+    "name": "Understanding AI",
+    "feedUrl": "https://www.understandingai.org/feed",
+    "tier": "context",
+    "coverage": "AI reporting, economics and policy",
+    "accessPolicy": "mixed",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Reported explanatory journalism by an established technology journalist; used for context and independent explanation.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.understandingai.org/about"]
+    }
+  },
+  {
+    "name": "ChinaTalk",
+    "feedUrl": "https://www.chinatalk.media/feed",
+    "tier": "context",
+    "coverage": "China AI, semiconductors and industrial policy",
+    "accessPolicy": "mixed",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Specialist interviews and translations on Chinese technology and policy; useful when source documents and named experts are present.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.chinatalk.media/about"]
+    }
+  },
+  {
+    "name": "AI Snake Oil",
+    "feedUrl": "https://www.aisnakeoil.com/feed",
+    "tier": "context",
+    "coverage": "AI evidence, evaluation, safety and policy",
+    "accessPolicy": "mixed",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Research-led skeptical analysis that explicitly tests claims and counterbalances promotional model coverage.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.aisnakeoil.com/about"]
+    }
+  },
+  {
+    "name": "Clouded Judgement",
+    "feedUrl": "https://cloudedjudgement.substack.com/feed",
+    "tier": "core",
+    "coverage": "Cloud, software economics and public-company metrics",
+    "accessPolicy": "mixed",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Data-heavy cloud and software market analysis with direct relevance to public-company operating metrics.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://cloudedjudgement.substack.com/about"]
+    }
+  },
+  {
+    "name": "Data Center Dynamics",
+    "feedUrl": "https://www.datacenterdynamics.com/rss/",
+    "tier": "core",
+    "coverage": "Datacenter construction, power, cooling and markets",
+    "accessPolicy": "free",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Established specialist trade newsroom covering datacenter infrastructure; third-party claims remain secondary reporting.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.datacenterdynamics.com/en/about-us/"]
+    }
+  },
+  {
+    "name": "Utility Dive",
+    "feedUrl": "https://www.utilitydive.com/feeds/news/",
+    "tier": "core",
+    "coverage": "Grid economics, regulation and large-load policy",
+    "accessPolicy": "free",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Professional utility-industry reporting with direct relevance to AI power constraints and regulatory decisions.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.utilitydive.com/about/"]
+    }
+  },
+  {
+    "name": "Chips and Cheese",
+    "feedUrl": "https://chipsandcheese.com/feed/",
+    "tier": "core",
+    "coverage": "Silicon architecture and measured hardware analysis",
+    "accessPolicy": "free",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Original benchmark and microarchitecture work with transparent methods; particularly valuable as standalone technical research.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://chipsandcheese.com/about/"]
+    }
+  },
+  {
+    "name": "Tech Policy Press",
+    "feedUrl": "https://www.techpolicy.press/rss/feed.xml",
+    "tier": "context",
+    "coverage": "AI governance, regulation and technology policy",
+    "accessPolicy": "free",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Specialist nonprofit policy publication with named authors and source links; policy analysis is not treated as issuer evidence.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.techpolicy.press/about/"]
+    }
+  },
+  {
+    "name": "The Batch",
+    "feedUrl": "https://charonhub.deeplearning.ai/rss/",
+    "tier": "context",
+    "coverage": "Weekly AI research and industry synthesis",
+    "accessPolicy": "free",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "DeepLearning.AI describes it as an authoritative, practitioner-oriented and hype-aware weekly digest; roundup threshold prevents duplication.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.deeplearning.ai/the-batch/about"]
+    }
+  },
+  {
+    "name": "Simon Willison's Weblog",
+    "feedUrl": "https://simonwillison.net/atom/entries/",
+    "tier": "core",
+    "coverage": "Model releases, developer tooling and reproducible technical analysis",
+    "accessPolicy": "free",
+    "dailyLimit": 2,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Independent practitioner with a long public track record, direct artifact links, hands-on testing and explicit disclosure practices.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://simonwillison.net/about/"]
+    }
+  },
+  {
+    "name": "Ahead of AI",
+    "feedUrl": "https://magazine.sebastianraschka.com/feed",
+    "tier": "core",
+    "coverage": "LLM architectures, training and research",
+    "accessPolicy": "mixed",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Technical research analysis by an LLM research engineer, former professor and established textbook author; strong cross-recommendations from research writers.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://magazine.sebastianraschka.com/about", "https://magazine.sebastianraschka.com/recommendations"]
+    }
+  },
+  {
+    "name": "The Gradient",
+    "feedUrl": "https://thegradient.pub/rss/",
+    "tier": "context",
+    "coverage": "Accessible, technically informed AI research analysis",
+    "accessPolicy": "free",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Nonprofit, volunteer-run publication founded in the Stanford AI community and edited by researchers; low cadence and high technical bar.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://thegradient.pub/about/", "https://thegradient.pub/write/"]
+    }
+  },
+  {
+    "name": "One Useful Thing",
+    "feedUrl": "https://www.oneusefulthing.org/feed",
+    "tier": "context",
+    "coverage": "Research-based implications of AI for work and enterprise adoption",
+    "accessPolicy": "mixed",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Research-based analysis by Wharton professor Ethan Mollick with clear authorship and practical experimentation; useful for adoption context rather than breaking proof.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.oneusefulthing.org/about"]
+    }
+  },
+  {
+    "name": "Deep (Learning) Focus",
+    "feedUrl": "https://cameronrwolfe.substack.com/feed",
+    "tier": "context",
+    "coverage": "Deep-learning methods, evaluation and model-training research",
+    "accessPolicy": "mixed",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Detailed first-principles research explanations by a PhD practitioner, cross-recommended by other vetted technical writers; slower cadence limits noise.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://cameronrwolfe.substack.com/", "https://magazine.sebastianraschka.com/recommendations"]
+    }
+  },
+  {
+    "name": "ChinAI",
+    "feedUrl": "https://chinai.substack.com/feed",
+    "tier": "context",
+    "coverage": "Chinese AI policy, research and translated primary materials",
+    "accessPolicy": "mixed",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Long-running specialist newsletter by Jeffrey Ding with translations and links to Chinese-language primary material; particularly useful for differentiated China context.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://chinai.substack.com/archive"]
+    }
+  },
+  {
+    "name": "The Next Platform",
+    "feedUrl": "https://www.nextplatform.com/feed/",
+    "tier": "core",
+    "coverage": "AI systems, HPC, networking, memory and hyperscale infrastructure",
+    "accessPolicy": "free",
+    "dailyLimit": 2,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "In-depth specialist publication covering high-end computing from processors and memory through networking and systems software; partner content is locally excluded.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.nextplatform.com/about/"]
+    }
+  },
+  {
+    "name": "Software Stack Investing",
+    "feedUrl": "https://softwarestackinvesting.com/feed/",
+    "tier": "core",
+    "coverage": "Cloud and software infrastructure through an investor lens",
+    "accessPolicy": "free",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Long-form analysis by an experienced software engineering leader, with explicit investing disclosures and permanent free access.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://softwarestackinvesting.com/about/", "https://softwarestackinvesting.com/disclosures/"]
+    }
+  },
+  {
+    "name": "Big Technology",
+    "feedUrl": "https://www.bigtechnology.com/feed",
+    "tier": "event",
+    "coverage": "Original reporting on large technology companies and AI strategy",
+    "accessPolicy": "mixed",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Independent former beat reporter emphasizing original, low-volume and nuanced reporting; only AI-stack-relevant pieces enter scoring.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.bigtechnology.com/about"]
+    }
+  },
+  {
+    "name": "Newcomer",
+    "feedUrl": "https://www.newcomer.co/feed",
+    "tier": "event",
+    "coverage": "AI startup funding, venture capital and company reporting",
+    "accessPolicy": "mixed",
+    "dailyLimit": 1,
+    "fetchPublicPage": true,
+    "vetting": {
+      "status": "approved",
+      "rationale": "Deeply reported startup and venture coverage led by a former Bloomberg and The Information reporter; admitted only for material AI financing or company events.",
+      "reviewedAt": "2026-08-04",
+      "evidenceUrls": ["https://www.newcomer.co/about"]
+    }
+  }
+]

@@ -13,6 +13,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "source-trust-policy.ps1")
 $nowUtc = (Get-Date).ToUniversalTime()
 $visibleLookbackHours = 48
+$newsletterAnalysisLookbackHours = 168
 if (-not $BreakingFeedPath) { $BreakingFeedPath = Join-Path $projectRoot "outputs\live-breaking-feed.json" }
 if (-not $CommentaryFeedPath) { $CommentaryFeedPath = Join-Path $projectRoot "outputs\live-commentary-feed.json" }
 if (-not $XFeedPath) { $XFeedPath = Join-Path $projectRoot "outputs\live-x-feed.json" }
@@ -37,7 +38,7 @@ function Repair-DisplayText {
         [regex]::IsMatch($Text, '[\u0080-\u009f]')
     if ($hasEncodingMarkers) {
         try {
-            $repaired = [Text.Encoding]::UTF8.GetString([Text.Encoding]::GetEncoding(28591).GetBytes($Text))
+            $repaired = [Text.Encoding]::UTF8.GetString([Text.Encoding]::GetEncoding(1252).GetBytes($Text))
             if (-not $repaired.Contains([char]0xfffd)) { return $repaired }
         } catch {}
     }
@@ -131,6 +132,25 @@ function Set-ObjectProperty {
     }
 }
 
+function Set-RecommendedAnalysis {
+    param($Target, $Newsletter)
+    if (-not $Target -or -not $Newsletter) { return }
+    $analysisValue = [string]$Newsletter.analysisValue
+    if (-not ([bool]$Newsletter.isOriginalResearch) -and $analysisValue -notin @("high", "exceptional")) { return }
+    $existingScore = if ($Target.PSObject.Properties["analysisScore"]) { [int]$Target.analysisScore } else { -1 }
+    if ($existingScore -gt [int]$Newsletter.score) { return }
+    Set-ObjectProperty $Target "recommendedAnalysis" $true
+    Set-ObjectProperty $Target "analysisTitle" (Repair-DisplayText ([string]$Newsletter.title))
+    Set-ObjectProperty $Target "analysisSource" (Repair-DisplayText ([string]$Newsletter.source))
+    Set-ObjectProperty $Target "analysisUrl" ([string]$Newsletter.url)
+    Set-ObjectProperty $Target "analysisScore" ([int]$Newsletter.score)
+    Set-ObjectProperty $Target "analysisPublishedAt" ([string]$Newsletter.publishedAt)
+    Set-ObjectProperty $Target "analysisAccessLevel" ([string]$Newsletter.accessLevel)
+    Set-ObjectProperty $Target "analysisValue" $analysisValue
+    Set-ObjectProperty $Target "analysisIncrementalValue" (Repair-DisplayText ([string]$Newsletter.incrementalValue))
+    Set-ObjectProperty $Target "analysisIsOriginalResearch" ([bool]$Newsletter.isOriginalResearch)
+}
+
 $allSignals = @()
 $sources = @()
 $sourceFeeds = @()
@@ -198,7 +218,12 @@ $allSignals = @($allSignals | Where-Object {
     try {
         $publishedUtc = ([datetime]$_.publishedAt).ToUniversalTime()
         $ageHours = ($nowUtc - $publishedUtc).TotalHours
-        $ageHours -ge -2 -and $ageHours -le $visibleLookbackHours
+        $maximumAgeHours = if ([string]$_.platform -eq "Substack" -and [bool]$_.recommendedAnalysis) {
+            $newsletterAnalysisLookbackHours
+        } else {
+            $visibleLookbackHours
+        }
+        $ageHours -ge -2 -and $ageHours -le $maximumAgeHours
     }
     catch { $false }
 })
@@ -261,21 +286,51 @@ foreach ($item in $rankedSignals) {
                 $existingTitleTokens = @(Get-TitleTokens ([string]$existing.title))
                 $titleSet = @{}; foreach ($token in $existingTitleTokens) { $titleSet[$token] = $true }
                 $titleOverlap = @($itemTitleTokens | Where-Object { $titleSet.ContainsKey($_) }).Count
+                $newsletterPair = ([string]$item.platform -eq "Substack" -and [bool]$item.recommendedAnalysis) -or
+                    ([string]$existing.platform -eq "Substack" -and [bool]$existing.recommendedAnalysis)
                 $nearSameEvent = $hoursApart -le 96 -and (
                     $similarity -ge 0.58 -or
                     ($samePublisher -and $similarity -ge 0.42) -or
                     ($sameCanonicalPublisher -and $hoursApart -le 24 -and $titleOverlap -ge 3) -or
                     ($sameEventType -and $entityOverlap -gt 0 -and ($similarity -ge 0.20 -or ($similarity -ge 0.15 -and $titleOverlap -ge 2)))
                 )
+                if (-not $nearSameEvent -and $newsletterPair -and $hoursApart -le $newsletterAnalysisLookbackHours) {
+                    $nearSameEvent = ($sameCanonicalPublisher -and $titleOverlap -ge 2) -or
+                        ($sameEventType -and $entityOverlap -gt 0 -and $titleOverlap -ge 2)
+                }
             } catch {}
         }
         if ($sameUrl -or $sameEventKey -or $nearSameEvent) { $duplicate = $existing; break }
     }
     if ($duplicate) {
+        $itemIsNewsletter = [string]$item.platform -eq "Substack"
+        $duplicateIsNewsletter = [string]$duplicate.platform -eq "Substack"
+        if ($itemIsNewsletter -and -not $duplicateIsNewsletter) {
+            Set-RecommendedAnalysis $duplicate $item
+        }
+        elseif ($duplicateIsNewsletter -and -not $itemIsNewsletter) {
+            foreach ($field in @("source", "handle", "title", "summary", "implication", "whyNow", "evidenceSummary")) {
+                $item.$field = Repair-DisplayText ([string]$item.$field)
+            }
+            Set-RecommendedAnalysis $item $duplicate
+            Set-ObjectProperty $item "relatedSources" @($duplicate.relatedSources + [string]$duplicate.source + [string]$item.source | Where-Object { $_ } | Select-Object -Unique)
+            Set-ObjectProperty $item "relatedUrls" @($duplicate.relatedUrls + [string]$duplicate.url + [string]$item.url | Where-Object { $_ } | Select-Object -Unique)
+            Set-ObjectProperty $item "relatedCoverageCount" @($item.relatedUrls).Count
+            Set-ObjectProperty $item "corroboratingUrls" @($item.corroboratingUrls + $duplicate.corroboratingUrls |
+                Where-Object { $_ -and ([string]$_).Trim().ToLowerInvariant() -ne ([string]$item.url).Trim().ToLowerInvariant() } |
+                Select-Object -Unique | Select-Object -First 4)
+            Set-ObjectProperty $item "hasIndependentConfirmation" ([bool]$item.hasIndependentConfirmation -or [bool]$duplicate.hasIndependentConfirmation)
+            Set-ObjectProperty $item "isBreaking" ([bool]$item.isBreaking -or [bool]$duplicate.isBreaking)
+            Set-ObjectProperty $item "mustInclude" ([bool]$item.mustInclude -or [bool]$duplicate.mustInclude)
+            $duplicateIndex = [array]::IndexOf($merged, $duplicate)
+            if ($duplicateIndex -ge 0) { $merged[$duplicateIndex] = $item }
+            continue
+        }
         $duplicate.relatedSources = @($duplicate.relatedSources + [string]$item.source | Where-Object { $_ } | Select-Object -Unique)
         $duplicate.relatedUrls = @($duplicate.relatedUrls + [string]$item.url | Where-Object { $_ } | Select-Object -Unique)
         $duplicate.relatedCoverageCount = $duplicate.relatedUrls.Count
-        $additionalCorroboration = @($duplicate.corroboratingUrls + $item.corroboratingUrls + [string]$item.url |
+        $coverageUrlForCorroboration = if ($itemIsNewsletter) { $null } else { [string]$item.url }
+        $additionalCorroboration = @($duplicate.corroboratingUrls + $item.corroboratingUrls + $coverageUrlForCorroboration |
             Where-Object { $_ -and ([string]$_).Trim().ToLowerInvariant() -ne ([string]$duplicate.url).Trim().ToLowerInvariant() } |
             Select-Object -Unique |
             Select-Object -First 4)
@@ -331,6 +386,22 @@ foreach ($item in $merged) {
     $item.relatedUrls = @($item.relatedUrls + [string]$commentary.url | Where-Object { $_ } | Select-Object -Unique)
     $item.relatedCoverageCount = $item.relatedUrls.Count
 }
+
+foreach ($item in $merged) {
+    foreach ($analysisField in @("analysisTitle", "analysisSource", "analysisIncrementalValue")) {
+        if ($item.PSObject.Properties[$analysisField]) {
+            Set-ObjectProperty $item $analysisField (Repair-DisplayText ([string]$item.$analysisField))
+        }
+    }
+}
+
+# Older long-form work can enrich a current event for up to one week, but it
+# never becomes an old standalone card on the current-news feed.
+$merged = @($merged | Where-Object {
+    if ([string]$_.platform -ne "Substack") { return $true }
+    try { return ($nowUtc - ([datetime]$_.publishedAt).ToUniversalTime()).TotalHours -le $visibleLookbackHours }
+    catch { return $false }
+})
 
 $frontPageLimit = [Math]::Min(8, $merged.Count)
 $frontPage = @()

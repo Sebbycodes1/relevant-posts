@@ -18,6 +18,8 @@ const breakingRefreshUrl = new URL("../scripts/fetch-breaking-events.ps1", impor
 const xRefreshUrl = new URL("../scripts/fetch-xai-signals.ps1", import.meta.url);
 const mergeUrl = new URL("../scripts/merge-live-feeds.ps1", import.meta.url);
 const commentaryRefreshUrl = new URL("../scripts/fetch-event-commentary.ps1", import.meta.url);
+const newsletterRefreshUrl = new URL("../scripts/fetch-substack.ps1", import.meta.url);
+const newsletterSourcesUrl = new URL("../scripts/newsletter-sources.json", import.meta.url);
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -289,6 +291,92 @@ test("full refresh is bounded, adaptive, measurable, and rebuilt once", async ()
   assert.match(mergeScript, /visibleLookbackHours = 48/);
   assert.match(refreshScript, /BreakingFallbackHours = 48/);
   assert.match(refreshScript, /-LookbackDays 2\b/);
+});
+
+test("newsletter universe is vetted and every scored candidate is audited", async () => {
+  const [sourcesText, newsletterScript, dashboard] = await Promise.all([
+    readFile(newsletterSourcesUrl, "utf8"),
+    readFile(newsletterRefreshUrl, "utf8"),
+    readFile(publishedDashboardUrl, "utf8"),
+  ]);
+  const sources = JSON.parse(sourcesText);
+  const approved = sources.filter((source) => source?.vetting?.status === "approved");
+
+  assert.ok(approved.length >= 25, "newsletter universe should contain at least 25 approved sources");
+  assert.equal(new Set(approved.map((source) => source.name)).size, approved.length);
+  for (const source of approved) {
+    assert.match(source.feedUrl, /^https:\/\//);
+    assert.ok(["core", "context", "event"].includes(source.tier));
+    assert.ok(["free", "mixed", "paid"].includes(source.accessPolicy));
+    assert.ok(source.vetting.rationale.length >= 40);
+    assert.ok(source.vetting.evidenceUrls.length >= 1);
+  }
+
+  assert.match(newsletterScript, /Get-FeedEntries/);
+  assert.match(newsletterScript, /local-name\(\)='feed'/);
+  assert.match(newsletterScript, /paywalled_preview/);
+  assert.match(newsletterScript, /Return exactly one decision for every supplied candidate URL/);
+  assert.match(newsletterScript, /minItems = \$candidates\.Count/);
+  assert.match(newsletterScript, /decision_completeness_check/);
+  assert.match(newsletterScript, /batchSize = 10/);
+  assert.match(newsletterScript, /Invoke-XaiResponseBatch/);
+  assert.match(newsletterScript, /newsletter-xai-budget\.json/);
+  assert.match(dashboard, /Recommended analysis:/);
+  assert.match(dashboard, /Paywalled preview/);
+});
+
+test("related newsletter research attaches to an event instead of disappearing in dedupe", async () => {
+  const tempDirectory = await mkdtemp(join(tmpdir(), "relevant-posts-newsletter-merge-"));
+  try {
+    const now = new Date().toISOString();
+    const breakingPath = join(tempDirectory, "breaking.json");
+    const newsletterPath = join(tempDirectory, "newsletter.json");
+    const combinedPath = join(tempDirectory, "combined.json");
+    const missingXPath = join(tempDirectory, "missing-x.json");
+    const missingCommentaryPath = join(tempDirectory, "missing-commentary.json");
+    const base = {
+      age: "1h", publishedAt: now, implication: "Analyst question", sectors: ["Models"],
+      significance: 30, credibility: 22, timeliness: 18, depth: 10, score: 80,
+      postType: "announcement", eventType: "model_release", entities: ["Example AI"],
+      whyNow: "New today", evidenceSummary: "Direct release", corroboratingUrls: [],
+      hasPrimaryEvidence: true, hasIndependentConfirmation: false,
+      hasMeasurableFirstOrderImpact: true, mustInclude: true, isBreaking: true,
+    };
+    await writeFile(breakingPath, JSON.stringify({ generatedAt: now, fallbackLookbackHours: 72, signals: [{
+      ...base, eventKey: "example-model-release", id: "official", source: "Example AI",
+      handle: "example", platform: "Web", title: "Example AI releases a new model",
+      summary: "Official model release", url: "https://example.com/model-release",
+    }] }), "utf8");
+    await writeFile(newsletterPath, JSON.stringify({ generatedAt: now, signals: [{
+      ...base, eventKey: "example-model-release", id: "analysis", source: "Vetted Analysis",
+      handle: "Newsletter", platform: "Substack", title: "Inside the new Example AI model",
+      summary: "Technical analysis", url: "https://analysis.example.com/model-release",
+      score: 72, significance: 25, credibility: 18, timeliness: 15, depth: 14,
+      postType: "analysis", hasPrimaryEvidence: false, mustInclude: false, isBreaking: false,
+      recommendedAnalysis: true, analysisValue: "high", incrementalValue: "Explains the architecture and cost tradeoffs.",
+      isOriginalResearch: false, accessLevel: "partial_preview",
+    }] }), "utf8");
+
+    runPowerShell(mergeUrl, [
+      "-BreakingFeedPath", breakingPath,
+      "-XFeedPath", missingXPath,
+      "-SubstackFeedPath", newsletterPath,
+      "-CommentaryFeedPath", missingCommentaryPath,
+      "-OutputPath", combinedPath,
+      "-SkipBuild",
+    ]);
+
+    const combined = JSON.parse(await readFile(combinedPath, "utf8"));
+    assert.equal(combined.signals.length, 1);
+    assert.equal(combined.signals[0].url, "https://example.com/model-release");
+    assert.equal(combined.signals[0].recommendedAnalysis, true);
+    assert.equal(combined.signals[0].analysisSource, "Vetted Analysis");
+    assert.equal(combined.signals[0].analysisUrl, "https://analysis.example.com/model-release");
+    assert.equal(combined.signals[0].analysisAccessLevel, "partial_preview");
+    assert.equal(combined.signals[0].hasIndependentConfirmation, false);
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
 });
 
 test("source trust policy prevents secondary reports from posing as primary breaking news", async () => {
