@@ -168,7 +168,14 @@ Search the assigned lane systematically. Use multiple keyword and semantic searc
 
 A major event changes capabilities, access, economics, capacity, regulation or competitive position. Examples include a model or weights release, benchmark-changing research, a material financing or capacity commitment, a filing or earnings disclosure, a major policy action or coalition, or a measurable infrastructure/supply-chain change. Routine promotion, partnerships without substance, repeated commentary, personality drama, engagement bait, vague claims and recycled news are not major events.
 
-Do not use discussion volume as a substitute for significance. Never invent a URL, date, signer, metric, absence, quotation or confirmation. A negative claim such as a company not signing a letter requires reliable independent evidence; otherwise omit that detail. Every included event must have a working direct HTTPS primary-source URL.
+Use this source hierarchy precisely:
+- An issuer newsroom, filing, official government action, official repository/paper, or original official X announcement is primary only for what that issuer actually publishes.
+- TrendForce, Omdia, TechInsights, Counterpoint and similar specialist-research firms are valuable estimates and channel checks, but are not primary evidence of another company's unannounced plans.
+- DigiTimes and other trade press, and Reuters/CNBC/Bloomberg/general media, are secondary reporting. They can corroborate an event but do not become primary by publishing it first.
+- Business Wire, GlobeNewswire and PR Newswire are primary only when distributing an explicitly issuer-attributed release; a distribution mirror is not independent corroboration.
+- An older policy, filing or background page does not verify a newly reported meeting, decision or event. The primary page must directly document the current event and date.
+
+Do not use discussion volume as a substitute for significance. Never invent a URL, date, signer, metric, absence, quotation or confirmation. A negative claim such as a company not signing a letter requires reliable independent evidence; otherwise omit that detail. Every included breaking event must have a working direct HTTPS primary-source URL. Specialist research without issuer confirmation may be returned only as analysis, never as mustInclude or Breaking.
 
 Score the EVENT, not a post or author's fame, conservatively:
 - Significance, 0-40: measurable change to products, capabilities, economics, capacity, regulation or competitive positioning.

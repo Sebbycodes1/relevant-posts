@@ -290,3 +290,107 @@ test("full refresh is bounded, adaptive, measurable, and rebuilt once", async ()
   assert.match(refreshScript, /BreakingFallbackHours = 48/);
   assert.match(refreshScript, /-LookbackDays 2\b/);
 });
+
+test("source trust policy prevents secondary reports from posing as primary breaking news", async () => {
+  const tempDirectory = await mkdtemp(join(tmpdir(), "relevant-posts-source-policy-"));
+  try {
+    const now = new Date().toISOString();
+    const breakingPath = join(tempDirectory, "breaking.json");
+    const combinedPath = join(tempDirectory, "combined.json");
+    const missingXPath = join(tempDirectory, "missing-x.json");
+    const missingSubstackPath = join(tempDirectory, "missing-substack.json");
+    const missingCommentaryPath = join(tempDirectory, "missing-commentary.json");
+    const baseSignal = {
+      handle: "source",
+      platform: "Web",
+      age: "1h",
+      publishedAt: now,
+      summary: "Test signal",
+      implication: "Test implication",
+      whyNow: "Published during the test window",
+      evidenceSummary: "Test evidence",
+      sectors: ["Memory"],
+      significance: 35,
+      credibility: 25,
+      timeliness: 20,
+      depth: 15,
+      score: 95,
+      postType: "analysis",
+      eventType: "supply_chain",
+      entities: ["NVIDIA"],
+      hasPrimaryEvidence: true,
+      hasIndependentConfirmation: false,
+      hasMeasurableFirstOrderImpact: true,
+      mustInclude: true,
+      isBreaking: true,
+    };
+    const feed = {
+      generatedAt: now,
+      fallbackLookbackHours: 72,
+      signals: [
+        {
+          ...baseSignal,
+          eventKey: "trendforce-test",
+          id: "trendforce-test",
+          source: "TrendForce",
+          title: "TrendForce reports an unannounced supplier plan",
+          entities: ["NVIDIA"],
+          url: "https://www.trendforce.com/presscenter/news/example.html",
+        },
+        {
+          ...baseSignal,
+          eventKey: "digitimes-test",
+          id: "digitimes-test",
+          source: "DigiTimes",
+          title: "DigiTimes reports memory capacity allocations",
+          entities: ["Samsung"],
+          url: "https://www.digitimes.com/news/example.html",
+        },
+        {
+          ...baseSignal,
+          eventKey: "official-test",
+          id: "official-test",
+          source: "AWS What's New",
+          title: "AWS publishes its own product announcement",
+          entities: ["Amazon"],
+          eventType: "model_release",
+          url: "https://aws.amazon.com/about-aws/whats-new/example",
+        },
+      ],
+    };
+    await writeFile(breakingPath, JSON.stringify(feed), "utf8");
+
+    runPowerShell(mergeUrl, [
+      "-BreakingFeedPath", breakingPath,
+      "-XFeedPath", missingXPath,
+      "-SubstackFeedPath", missingSubstackPath,
+      "-CommentaryFeedPath", missingCommentaryPath,
+      "-OutputPath", combinedPath,
+      "-SkipBuild",
+    ]);
+
+    const combined = JSON.parse(await readFile(combinedPath, "utf8"));
+    const trendforce = combined.signals.find((signal) => signal.id === "trendforce-test");
+    const digitimes = combined.signals.find((signal) => signal.id === "digitimes-test");
+    const official = combined.signals.find((signal) => signal.id === "official-test");
+
+    assert.equal(trendforce.sourceTrustClass, "specialist_research");
+    assert.equal(trendforce.hasPrimaryEvidence, false);
+    assert.equal(trendforce.isBreaking, false);
+    assert.equal(trendforce.mustInclude, false);
+    assert.ok(trendforce.credibility <= 16);
+    assert.ok(trendforce.score <= 69);
+
+    assert.equal(digitimes.sourceTrustClass, "trade_press");
+    assert.equal(digitimes.hasPrimaryEvidence, false);
+    assert.equal(digitimes.isBreaking, false);
+    assert.ok(digitimes.credibility <= 14);
+    assert.ok(digitimes.score <= 69);
+
+    assert.equal(official.sourceTrustClass, "official_primary");
+    assert.equal(official.hasPrimaryEvidence, true);
+    assert.ok(official.credibility <= 22, "single-source official claims should not receive full corroboration credit");
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
+});

@@ -4,11 +4,13 @@ param(
     [string]$CommentaryFeedPath,
     [string]$XFeedPath,
     [string]$SubstackFeedPath,
-    [string]$OutputPath
+    [string]$OutputPath,
+    [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot "source-trust-policy.ps1")
 $nowUtc = (Get-Date).ToUniversalTime()
 $visibleLookbackHours = 48
 if (-not $BreakingFeedPath) { $BreakingFeedPath = Join-Path $projectRoot "outputs\live-breaking-feed.json" }
@@ -204,6 +206,11 @@ if ($allSignals.Count -eq 0) { throw "No signals were published inside the stric
 $allSignals = @($allSignals | Where-Object { -not ($_.eventType -eq "other" -and [int]$_.score -lt 70) })
 if ($allSignals.Count -eq 0) { throw "No live signals cleared the event classification policy." }
 
+# Apply a deterministic source hierarchy after every ingestion lane. This is a
+# safety net against a model confusing a publisher's own report with primary
+# evidence of the company or government action being reported.
+$allSignals = @($allSignals | ForEach-Object { Apply-SourceTrustPolicy $_ })
+
 foreach ($item in $allSignals) {
     if (-not [bool]$item.mustInclude) { continue }
     try {
@@ -273,7 +280,7 @@ foreach ($item in $rankedSignals) {
             Select-Object -Unique |
             Select-Object -First 4)
         Set-ObjectProperty $duplicate "corroboratingUrls" $additionalCorroboration
-        Set-ObjectProperty $duplicate "hasIndependentConfirmation" ([bool]$duplicate.hasIndependentConfirmation -or [bool]$item.hasIndependentConfirmation -or $duplicate.relatedSources.Count -gt 1)
+        Set-ObjectProperty $duplicate "hasIndependentConfirmation" ([bool]$duplicate.hasIndependentConfirmation -or [bool]$item.hasIndependentConfirmation)
         Set-ObjectProperty $duplicate "isBreaking" ([bool]$duplicate.isBreaking -or [bool]$item.isBreaking)
         Set-ObjectProperty $duplicate "mustInclude" ([bool]$duplicate.mustInclude -or [bool]$item.mustInclude)
         continue
@@ -386,6 +393,8 @@ $combined = [ordered]@{
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($OutputPath, ($combined | ConvertTo-Json -Depth 20), $utf8)
 
-$builder = Join-Path $PSScriptRoot "build-live-dashboard.ps1"
-& $builder -FeedPath $OutputPath | Out-Host
+if (-not $SkipBuild) {
+    $builder = Join-Path $PSScriptRoot "build-live-dashboard.ps1"
+    & $builder -FeedPath $OutputPath | Out-Host
+}
 Write-Host "Merged $($merged.Count) signals into the live dashboard." -ForegroundColor Green
