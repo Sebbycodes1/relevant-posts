@@ -295,8 +295,8 @@ export default function Home() {
         </div>
         <nav aria-label="Primary navigation">
           <button className={activeView === "feed" ? "nav-active" : ""} onClick={() => setActiveView("feed")}>Morning brief</button>
-          <button className={activeView === "sources" ? "nav-active" : ""} onClick={() => setActiveView("sources")}>Source book</button>
-          <button className={activeView === "rubric" ? "nav-active" : ""} onClick={() => setActiveView("rubric")}>Scoring rubric</button>
+          <button className={activeView === "sources" ? "nav-active" : ""} onClick={() => setActiveView("sources")}>Sources</button>
+          <button className={activeView === "rubric" ? "nav-active" : ""} onClick={() => setActiveView("rubric")}>How we filter</button>
         </nav>
         <div className="refresh-block">
           <span className={`live-dot ${feedMeta.mode}`} />
@@ -394,7 +394,7 @@ export default function Home() {
       </section>}
 
       {activeView === "rubric" && <section className="page-panel">
-        <p className="date-line">SIGNAL QUALITY MODEL · V0.1</p><h2>Significance first. Credibility always.</h2>
+        <p className="date-line">SIGNAL QUALITY MODEL · V0.1</p><h2>How we filter out slop</h2>
         <p className="panel-lead">The score is intentionally legible so an analyst can challenge it. Engagement is supporting evidence—not a quality proxy.</p>
         <div className="rubric-grid">
           <div><span>01 · 40 points</span><h3>Investment significance</h3><p>Magnitude, breadth of impact, surprise versus expectations, and relevance to the AI capital stack.</p></div>

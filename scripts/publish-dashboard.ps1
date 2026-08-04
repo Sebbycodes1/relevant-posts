@@ -42,11 +42,6 @@ if ($embeddedSignalCount -ne $signals.Count) {
     throw "The dashboard contains $embeddedSignalCount signals but the combined feed contains $($signals.Count)."
 }
 
-$html = $html.Replace(
-    'The dashboard file and your feedback stay on this device. A refresh sends only public-source text to the configured xAI service for scoring.',
-    'This shared prototype is a read-only snapshot. Feedback stays in this browser; source refreshes are generated separately.'
-)
-
 $publishedDirectory = Split-Path -Parent $PublishedPath
 New-Item -ItemType Directory -Path $publishedDirectory -Force | Out-Null
 $utf8 = New-Object System.Text.UTF8Encoding($false)

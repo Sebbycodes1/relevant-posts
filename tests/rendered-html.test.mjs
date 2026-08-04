@@ -78,8 +78,8 @@ test("server renders the Relevant Posts product", async () => {
   const html = await response.text();
   assert.match(html, /<title>Relevant Posts/i);
   assert.match(html, /Morning brief/);
-  assert.match(html, /Source book/);
-  assert.match(html, /Scoring rubric/);
+  assert.match(html, />Sources</);
+  assert.match(html, /How we filter/);
   assert.doesNotMatch(html, /Your site is taking shape|Codex is working|react-loading-skeleton/);
 });
 
@@ -233,8 +233,9 @@ test("dashboard builder refreshes static and runtime metadata idempotently", asy
       "-SkipGit",
     ]);
     const published = await readFile(publishedPath, "utf8");
-    assert.match(published, /This shared prototype is a read-only snapshot/);
-    assert.doesNotMatch(published, /dashboard file and your feedback stay on this device/i);
+    assert.match(published, /How we filter out slop/);
+    assert.doesNotMatch(published, /100-point hurdle against slop|PM evidence discipline|Human feedback loop|Prototype boundary/);
+    assert.doesNotMatch(published, /data-action="(?:save|useful|dismiss)"|Display threshold|shared prototype/i);
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
   }

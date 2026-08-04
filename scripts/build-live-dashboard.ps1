@@ -74,7 +74,6 @@ else {
 }
 
 $updated = [regex]::Replace($updated, '<title>Relevant Posts[^<]*</title>', '<title>Relevant Posts - Live Brief</title>', 1)
-$updated = $updated.Replace('<span class="offline-pill">Offline prototype</span>', '<span class="offline-pill">Live snapshot</span>')
 $updated = [regex]::Replace($updated, '<div class="eyebrow">Tuesday intelligence brief[^<]*</div>', "<div class=`"eyebrow`">$snapshotLabel</div>", 1)
 $updated = [regex]::Replace($updated, '<span id="feedMode">[^<]*</span>', "<span id=`"feedMode`">$snapshotLabel - sources refreshed $sourceUpdatedLocal</span>", 1)
 $modeLabel = "$snapshotLabel - sources refreshed $sourceUpdatedLocal"
@@ -87,12 +86,6 @@ $updated = [regex]::Replace(
     },
     1
 )
-$updated = [regex]::Replace($updated, '<p>These sources are configured as a starting watchlist\.[^<]*</p>', '<p>This standalone edition includes the latest locally collected X and newsletter/RSS results that cleared the scoring workflow.</p>', 1)
-$updated = $updated.Replace(
-    'This shared prototype is a read-only snapshot. Feedback stays in this browser; source refreshes are generated separately.',
-    'The dashboard file and your feedback stay on this device. A refresh sends only public-source text to the configured xAI service for scoring.'
-)
-
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($OutputPath, $updated, $utf8)
 Write-Host "Created one-click live dashboard: $OutputPath" -ForegroundColor Green
