@@ -276,10 +276,11 @@ test("balanced refresh preserves broad coverage behind a four-dollar serial stop
 
   assert.match(balancedRefresh, /-Balanced\b/);
   assert.match(balancedRefresh, /-MaxXaiSpendUsd 4\.00/);
-  assert.match(balancedRefresh, /-MaxXaiRequests 16/);
+  assert.match(balancedRefresh, /-MaxXaiRequests 20/);
   assert.doesNotMatch(fullRefresh, /-Balanced\b/);
   assert.match(refreshScript, /-ReservePerRequestUsd 0\.75/);
   assert.match(refreshScript, /-CommentaryEventLimit 5\b/);
+  assert.match(refreshScript, /-MaxSignals 20 -MaxBatches 0\b/);
   assert.match(refreshScript, /-MaxCandidates 25\b/);
   assert.match(refreshScript, /-LookbackHours 36\b/);
   assert.match(breakingScript, /Balanced capabilities policy and open ecosystem/);
@@ -472,6 +473,62 @@ test("source trust policy prevents secondary reports from posing as primary brea
           eventType: "model_release",
           url: "https://aws.amazon.com/about-aws/whats-new/example",
         },
+        {
+          ...baseSignal,
+          eventKey: "social-analysis-test",
+          id: "social-analysis-test",
+          source: "Specialist Analyst",
+          handle: "SpecialistAnalyst",
+          platform: "X",
+          title: "Specialist analysis of an AI infrastructure contract",
+          entities: ["Anthropic", "Example Cloud"],
+          hasIndependentConfirmation: false,
+          url: "https://x.com/SpecialistAnalyst/status/1234567890",
+        },
+        {
+          ...baseSignal,
+          eventKey: "newsletter-analysis-test",
+          id: "newsletter-analysis-test",
+          source: "Technical Newsletter",
+          handle: "Newsletter",
+          platform: "Substack",
+          title: "Technical analysis of a newly published architecture",
+          entities: ["NVIDIA"],
+          isOriginalResearch: false,
+          hasIndependentConfirmation: false,
+          url: "https://technical.example.substack.com/p/architecture-analysis",
+        },
+        {
+          ...baseSignal,
+          eventKey: "spacex-nvidia-primary",
+          id: "spacex-nvidia-primary",
+          source: "SpaceX",
+          handle: "SpaceX",
+          platform: "X",
+          postType: "announcement",
+          eventType: "corporate",
+          title: "SpaceX and NVIDIA launch orbital AI compute payload",
+          entities: ["SpaceX", "NVIDIA"],
+          url: "https://x.com/SpaceX/status/2234567890",
+        },
+        {
+          ...baseSignal,
+          eventKey: "spacex-nvidia-secondary",
+          id: "spacex-nvidia-secondary",
+          source: "NVIDIA",
+          handle: "nvidia",
+          platform: "X",
+          postType: "announcement",
+          eventType: "infrastructure",
+          score: 65,
+          significance: 25,
+          credibility: 20,
+          timeliness: 12,
+          depth: 8,
+          title: "NVIDIA powers SpaceX orbital AI satellite payload",
+          entities: ["NVIDIA", "SpaceX"],
+          url: "https://x.com/nvidia/status/3234567890",
+        },
       ],
     };
     await writeFile(breakingPath, JSON.stringify(feed), "utf8");
@@ -489,6 +546,9 @@ test("source trust policy prevents secondary reports from posing as primary brea
     const trendforce = combined.signals.find((signal) => signal.id === "trendforce-test");
     const digitimes = combined.signals.find((signal) => signal.id === "digitimes-test");
     const official = combined.signals.find((signal) => signal.id === "official-test");
+    const socialAnalysis = combined.signals.find((signal) => signal.id === "social-analysis-test");
+    const newsletterAnalysis = combined.signals.find((signal) => signal.id === "newsletter-analysis-test");
+    const spacexCoverage = combined.signals.filter((signal) => signal.id === "spacex-nvidia-primary" || signal.id === "spacex-nvidia-secondary");
 
     assert.equal(trendforce.sourceTrustClass, "specialist_research");
     assert.equal(trendforce.hasPrimaryEvidence, false);
@@ -506,6 +566,13 @@ test("source trust policy prevents secondary reports from posing as primary brea
     assert.equal(official.sourceTrustClass, "official_primary");
     assert.equal(official.hasPrimaryEvidence, true);
     assert.ok(official.credibility <= 22, "single-source official claims should not receive full corroboration credit");
+
+    assert.equal(socialAnalysis.sourceTrustClass, "social_post");
+    assert.ok(socialAnalysis.score <= 79, "uncorroborated X analysis should not outrank a verified primary event");
+    assert.equal(newsletterAnalysis.sourceTrustClass, "newsletter_analysis");
+    assert.ok(newsletterAnalysis.score <= 79, "non-original newsletter analysis should remain below the core-event band");
+    assert.equal(spacexCoverage.length, 1, "same-event partner posts should merge across event-type labels");
+    assert.equal(spacexCoverage[0].relatedCoverageCount, 2);
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
   }

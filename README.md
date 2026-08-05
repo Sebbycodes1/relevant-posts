@@ -8,7 +8,7 @@ The production surface is the static dashboard at `docs\index.html`, published t
 
 ### Refresh and publish
 
-1. In the morning, double-click `refresh-and-publish-balanced.cmd` for the recommended curated edition. It preserves complete category coverage, scans all vetted newsletters, and limits expensive event commentary to the top five verified events. Paid requests run serially and stop near a $4 run limit.
+1. In the morning, double-click `refresh-and-publish-balanced.cmd` for the recommended curated edition. It preserves complete category coverage, scans the full vetted X and newsletter universes, and limits expensive event commentary to the top five verified events. Paid requests run serially and stop near a $4 run limit.
 2. Leave the window open while the source passes and quality checks run.
 3. If every source lane succeeds, the workflow updates the shared GitHub Pages dashboard automatically.
 4. After major afternoon earnings or announcements, double-click `refresh-and-publish-catch-up.cmd`. This lighter pass retains the morning account and newsletter scans, with a five-request / $0.60 stop-limit.

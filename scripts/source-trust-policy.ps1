@@ -110,11 +110,16 @@ function Apply-SourceTrustPolicy {
         "newsletter_analysis" {
             $label = "Newsletter analysis"
             $note = "Analysis is scored for evidence and depth, but is not issuer confirmation."
+            $isOriginalResearch = $Item.PSObject.Properties["isOriginalResearch"] -and [bool]$Item.isOriginalResearch
+            $isSecondaryAnalysis = ([string]$Item.postType).ToLowerInvariant() -eq "analysis" -and -not $isOriginalResearch
             if (-not [bool]$Item.hasPrimaryEvidence) {
                 Set-SourceTrustProperty $Item "isBreaking" $false
                 Set-SourceTrustProperty $Item "mustInclude" $false
                 $credibilityCap = if ($independent) { 20 } else { 16 }
                 $scoreCap = 79
+            }
+            if ($isSecondaryAnalysis -and -not $independent) {
+                $scoreCap = [Math]::Min($scoreCap, 79)
             }
         }
         "wire_release" {
@@ -140,6 +145,10 @@ function Apply-SourceTrustPolicy {
         "social_post" {
             $label = "X post"
             $note = "Scored under the account and evidence policy for X commentary."
+            $isAnalyticalPost = ([string]$Item.postType).ToLowerInvariant() -in @("analysis", "commentary")
+            if ($isAnalyticalPost -and -not $independent) {
+                $scoreCap = 79
+            }
         }
         default {
             $label = "Secondary analysis"

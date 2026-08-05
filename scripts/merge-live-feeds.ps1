@@ -292,6 +292,7 @@ foreach ($item in $rankedSignals) {
                     $similarity -ge 0.58 -or
                     ($samePublisher -and $similarity -ge 0.42) -or
                     ($sameCanonicalPublisher -and $hoursApart -le 24 -and $titleOverlap -ge 3) -or
+                    ($entityOverlap -ge 2 -and $hoursApart -le 48 -and $titleOverlap -ge 2) -or
                     ($sameEventType -and $entityOverlap -gt 0 -and ($similarity -ge 0.20 -or ($similarity -ge 0.15 -and $titleOverlap -ge 2)))
                 )
                 if (-not $nearSameEvent -and $newsletterPair -and $hoursApart -le $newsletterAnalysisLookbackHours) {

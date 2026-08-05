@@ -127,7 +127,7 @@ else {
             & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours 24 -MaxSignals 12 -MaxBatches 1 -MaxConcurrency 1 -Model "grok-4.3" -Economy -SkipMerge
         }
         elseif ($Balanced) {
-            & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours 36 -MaxSignals 16 -MaxBatches 1 -MaxConcurrency 1 -Model "grok-4.3" -Economy -SkipMerge
+            & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours 36 -MaxSignals 20 -MaxBatches 0 -MaxConcurrency 1 -Model "grok-4.3" -Economy -SkipMerge
         }
         else {
             & (Join-Path $PSScriptRoot "fetch-xai-signals.ps1") -LookbackHours $XLookbackHours -MaxSignals 20 -MaxConcurrency 2 -SkipMerge
