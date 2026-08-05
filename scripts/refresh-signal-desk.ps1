@@ -180,7 +180,7 @@ try {
         & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 75 -CommentaryEventLimit 2 -LookbackDays 3 -CandidatesPerEvent 5 -MinimumCandidatesPerEvent 3 -MaxDiscoveryPasses 1 -Model "grok-4.3" -Economy -SkipMerge
     }
     elseif ($Balanced) {
-        & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 75 -CommentaryEventLimit 3 -LookbackDays 2 -CandidatesPerEvent 7 -MinimumCandidatesPerEvent 4 -MaxDiscoveryPasses 1 -Model "grok-4.3" -Economy -SkipMerge
+        & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 75 -CommentaryEventLimit 5 -LookbackDays 2 -CandidatesPerEvent 7 -MinimumCandidatesPerEvent 4 -MaxDiscoveryPasses 1 -Model "grok-4.3" -Economy -SkipMerge
     }
     else {
         & (Join-Path $PSScriptRoot "fetch-event-commentary.ps1") -MinimumCommentaryScore 70 -MinimumEventScore 70 -CommentaryEventLimit 12 -LookbackDays 2 -CandidatesPerEvent 10 -MinimumCandidatesPerEvent 5 -MaxDiscoveryPasses 2 -SkipMerge

@@ -73,7 +73,7 @@ else {
     "X"
 }
 
-$updated = [regex]::Replace($updated, '<title>Relevant Posts[^<]*</title>', '<title>Relevant Posts - Live Brief</title>', 1)
+$updated = [regex]::Replace($updated, '<title>Relevant Posts[^<]*</title>', '<title>Relevant Posts - AI Stack Brief</title>', 1)
 $updated = [regex]::Replace($updated, '<div class="eyebrow">Tuesday intelligence brief[^<]*</div>', "<div class=`"eyebrow`">$snapshotLabel</div>", 1)
 $updated = [regex]::Replace($updated, '<span id="feedMode">[^<]*</span>', "<span id=`"feedMode`">$snapshotLabel - sources refreshed $sourceUpdatedLocal</span>", 1)
 $modeLabel = "$snapshotLabel - sources refreshed $sourceUpdatedLocal"

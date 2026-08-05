@@ -162,6 +162,9 @@ test("published dashboard embeds a valid ranked feed", async () => {
     /Number\(isBreakingNow\(right\)\) - Number\(isBreakingNow\(left\)\)/,
     "current breaking news should receive first ranking priority",
   );
+  assert.match(html, /function sourceLinkLabel\(item\)/, "source links should use evidence-aware labels");
+  assert.match(html, /sourceTrustClass === "trade_press"\) return "Open reporting"/);
+  assert.match(html, /<meta property="og:title" content="Relevant Posts - AI Stack Brief">/);
   assert.doesNotMatch(html, /[\u0080-\u009f]/, "dashboard should not contain mojibake control characters");
 });
 
@@ -276,7 +279,7 @@ test("balanced refresh preserves broad coverage behind a four-dollar serial stop
   assert.match(balancedRefresh, /-MaxXaiRequests 16/);
   assert.doesNotMatch(fullRefresh, /-Balanced\b/);
   assert.match(refreshScript, /-ReservePerRequestUsd 0\.75/);
-  assert.match(refreshScript, /-CommentaryEventLimit 3\b/);
+  assert.match(refreshScript, /-CommentaryEventLimit 5\b/);
   assert.match(refreshScript, /-MaxCandidates 25\b/);
   assert.match(refreshScript, /-LookbackHours 36\b/);
   assert.match(breakingScript, /Balanced capabilities policy and open ecosystem/);

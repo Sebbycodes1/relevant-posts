@@ -2,11 +2,13 @@
 
 Relevant Posts is a locally refreshed AI intelligence feed for asset-management analysts and portfolio managers. It prioritizes verified developments across models, labs, chips, memory, infrastructure, energy, hyperscalers and policy.
 
+The production surface is the static dashboard at `docs\index.html`, published through GitHub Pages. It has no database, authentication layer or client-side API credentials; source collection, grading and audit logs run locally before a vetted snapshot is published. The Vinext application files support local build validation and a possible future hosted runtime, but are not used by the current GitHub Pages deployment.
+
 ## Use the prototype
 
 ### Refresh and publish
 
-1. In the morning, double-click `refresh-and-publish-balanced.cmd` for the recommended curated edition. It preserves complete category coverage, scans all vetted newsletters, and limits expensive event commentary to the top three verified events. Paid requests run serially and stop near a $4 run limit.
+1. In the morning, double-click `refresh-and-publish-balanced.cmd` for the recommended curated edition. It preserves complete category coverage, scans all vetted newsletters, and limits expensive event commentary to the top five verified events. Paid requests run serially and stop near a $4 run limit.
 2. Leave the window open while the source passes and quality checks run.
 3. If every source lane succeeds, the workflow updates the shared GitHub Pages dashboard automatically.
 4. After major afternoon earnings or announcements, double-click `refresh-and-publish-catch-up.cmd`. This lighter pass retains the morning account and newsletter scans, with a five-request / $0.60 stop-limit.
@@ -21,7 +23,7 @@ The refresh is manual by design for the prototype. Every run records the exact p
 
 ## What the refresh does
 
-1. **Broad event discovery:** runs separate searches for models/labs, semiconductors, infrastructure, hyperscalers, policy and market-moving capital or earnings, plus a deterministic official-source catalyst watchlist. Independent lanes run two at a time; a second pass and cross-lane gap audit run only when verified coverage is actually thin.
+1. **Broad event discovery:** the recommended balanced mode consolidates the full coverage universe into two complementary searches, then runs a deterministic official-source catalyst watchlist. Full mode can still run separate model/lab, semiconductor, infrastructure, hyperscaler, policy and market-moving capital or earnings lanes when a deeper audit is warranted.
 2. **Primary-source verification:** uses X attention to find developments, then requires a direct official source before an event can enter the feed. The scan starts with 24 hours and may search back 48 hours for coverage completeness.
 3. **Curated X and newsletter monitoring:** reviews configured high-signal accounts and 25 vetted specialist publications without limiting broad discovery to that source list. The newsletter lane supports RSS and Atom, reads the longest publicly available article text, labels full/partial/paywalled access, and records an include-or-exclude decision for every candidate. It never bypasses a paywall.
 4. **Event-specific X search:** searches every verified event independently using names, entities, metrics, links, semantic variants and quote posts. Thin searches are retried automatically.

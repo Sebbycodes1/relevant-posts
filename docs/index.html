@@ -3,7 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Relevant Posts - Live Brief</title>
+  <title>Relevant Posts - AI Stack Brief</title>
+  <meta name="description" content="A curated, significance-first briefing on developments across the AI stack.">
+  <meta property="og:title" content="Relevant Posts - AI Stack Brief">
+  <meta property="og:description" content="A curated, significance-first briefing on developments across the AI stack.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://sebbycodes1.github.io/relevant-posts/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Relevant Posts - AI Stack Brief">
+  <meta name="twitter:description" content="A curated, significance-first briefing on developments across the AI stack.">
+  <link rel="canonical" href="https://sebbycodes1.github.io/relevant-posts/">
   <style>
     :root {
       --ink: #17211d;
@@ -367,6 +376,7 @@
             <div class="eyebrow">Coverage universe</div>
             <h1>Sources we monitor</h1>
             <p class="lede">We scan X, official sites and model repositories for events, then use this vetted watchlist to add depth from research and technical operators. Newsletter ingestion reads only public RSS, Atom and publicly accessible article text; full articles, previews and paywalled previews are labeled, and access controls are never bypassed. Every candidate receives an explicit include or exclude decision before related coverage is clustered.</p>
+            <p class="lede"><b>Deployment:</b> this is a static, manually refreshed GitHub Pages snapshot. It contains public-source content only; API credentials and processing logs remain local.</p>
           </div>
           <div class="content-grid">
             <section class="panel source-table">
@@ -565,6 +575,13 @@
       if (value === "Web") return "Official / Web";
       return value;
     }
+    function sourceLinkLabel(item) {
+      if (item.platform === "X" || item.sourceTrustClass === "social_post") return "Open X post";
+      if (item.platform === "Substack" || item.sourceTrustClass === "newsletter_analysis" || item.sourceTrustClass === "specialist_research") return "Open analysis";
+      if (item.sourceTrustClass === "trade_press") return "Open reporting";
+      if (["official_primary", "government_primary", "wire_release"].includes(item.sourceTrustClass) || item.hasPrimaryEvidence) return "Open primary source";
+      return "Open source";
+    }
     function analysisAccessLabel(value) {
       const labels = {
         full_public: "Full public article",
@@ -717,7 +734,7 @@
               </details>
               <div class="card-footer">
                 <div class="source-links">
-                  <a class="article-link" href="${safeUrl(item.url)}" target="_blank" rel="noreferrer">${standaloneAnalysis ? "Open analysis" : "Open primary source"} <span aria-hidden="true">&nearr;</span></a>
+                  <a class="article-link" href="${safeUrl(item.url)}" target="_blank" rel="noreferrer">${sourceLinkLabel(item)} <span aria-hidden="true">&nearr;</span></a>
                   ${featuredCommentary && commentaryUrl !== "#" ? `<a class="article-link" href="${commentaryUrl}" target="_blank" rel="noreferrer">Open commentary from ${esc(commentarySource)} <span aria-hidden="true">&nearr;</span></a>` : ""}
                   ${item.recommendedAnalysis && analysisUrl !== "#" ? `<a class="article-link" href="${analysisUrl}" target="_blank" rel="noreferrer">Open analysis from ${esc(analysisSource)} <span aria-hidden="true">&nearr;</span></a>` : ""}
                 </div>

@@ -13,7 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const imageUrl = `${protocol}://${host}/og.png`;
 
   return {
-    title: "Relevant Posts — Curated AI Intelligence",
+    title: "Relevant Posts - Curated AI Intelligence",
     description: "A significance-first AI news feed for asset-management analysts and portfolio managers.",
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
     openGraph: { title: "Relevant Posts", description: "Curated AI intelligence for analysts and portfolio managers.", images: [imageUrl] },
