@@ -22,6 +22,7 @@ const mergeUrl = new URL("../scripts/merge-live-feeds.ps1", import.meta.url);
 const commentaryRefreshUrl = new URL("../scripts/fetch-event-commentary.ps1", import.meta.url);
 const newsletterRefreshUrl = new URL("../scripts/fetch-substack.ps1", import.meta.url);
 const newsletterSourcesUrl = new URL("../scripts/newsletter-sources.json", import.meta.url);
+const morningWorkflowUrl = new URL("../.github/workflows/morning-refresh.yml", import.meta.url);
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -287,6 +288,22 @@ test("balanced refresh preserves broad coverage behind a four-dollar serial stop
   assert.match(breakingScript, /Balanced compute infrastructure and AI economics/);
   assert.match(breakingScript, /profile = if \(\$Economy\) \{ "economy" \} elseif \(\$Balanced\) \{ "balanced" \}/);
   assert.match(newsletterScript, /-MaxConcurrency \$MaxConcurrency/);
+});
+
+test("morning automation runs the guarded balanced publisher at 7:07 Eastern", async () => {
+  const workflow = await readFile(morningWorkflowUrl, "utf8");
+
+  assert.match(workflow, /cron: ["']7 7 \* \* \*["']/);
+  assert.match(workflow, /timezone: ["']America\/New_York["']/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /contents: write/);
+  assert.match(workflow, /XAI_API_KEY: \$\{\{ secrets\.XAI_API_KEY \}\}/);
+  assert.match(workflow, /-Balanced\b/);
+  assert.match(workflow, /-MaxXaiSpendUsd 4\.00/);
+  assert.match(workflow, /-MaxXaiRequests 20/);
+  assert.match(workflow, /-Publish\b/);
+  assert.match(workflow, /-SkipOpen\b/);
+  assert.match(workflow, /timeout-minutes: 30/);
 });
 
 test("full refresh is bounded, adaptive, measurable, and rebuilt once", async () => {

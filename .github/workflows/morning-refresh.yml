@@ -1,0 +1,86 @@
+name: Morning dashboard refresh
+
+on:
+  schedule:
+    - cron: "7 7 * * *"
+      timezone: "America/New_York"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: relevant-posts-morning-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+
+    steps:
+      - name: Check out the dashboard
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify the xAI secret
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:XAI_API_KEY)) {
+            throw "Add XAI_API_KEY under Settings > Secrets and variables > Actions before running the refresh."
+          }
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Configure the publisher
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Refresh, validate, and publish
+        shell: pwsh
+        run: |
+          .\scripts\refresh-signal-desk.ps1 `
+            -Balanced `
+            -MaxXaiSpendUsd 4.00 `
+            -MaxXaiRequests 20 `
+            -Publish `
+            -SkipOpen
+
+      - name: Add refresh details to the run summary
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath "work\last-refresh-status.json")) {
+            "No refresh status file was produced." >> $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+
+          $status = Get-Content -LiteralPath "work\last-refresh-status.json" -Raw | ConvertFrom-Json
+          $cost = if ($status.xaiUsage.costTrackingAvailable) {
+            '$' + ([double]$status.xaiUsage.actualCostUsd).ToString('0.000')
+          }
+          else {
+            'not returned by xAI'
+          }
+          @(
+            "## Relevant Posts refresh"
+            ""
+            "- Status: $($status.status)"
+            "- Profile: $($status.profile)"
+            "- Published: $($status.published)"
+            "- xAI requests: $($status.xaiUsage.requestCount) / $($status.xaiUsage.maximumRequests)"
+            "- xAI cost: $cost (stop-limit: `$$($status.xaiUsage.maximumUsd))"
+            "- Runtime: $($status.elapsedMinutes) minutes"
+          ) >> $env:GITHUB_STEP_SUMMARY

@@ -8,7 +8,13 @@ The production surface is the static dashboard at `docs\index.html`, published t
 
 ### Refresh and publish
 
-1. In the morning, double-click `refresh-and-publish-balanced.cmd` for the recommended curated edition. It preserves complete category coverage, scans the full vetted X and newsletter universes, and limits expensive event commentary to the top five verified events. Paid requests run serially and stop near a $4 run limit.
+The `Morning dashboard refresh` GitHub Actions workflow runs every day at 7:07 a.m. America/New_York time. It uses the recommended balanced profile, scans the full vetted X and newsletter universes, limits expensive event commentary to the top five verified events, and stops near a $4 xAI run limit. It publishes only when every source lane and dashboard validation completes successfully.
+
+One repository administrator must add the xAI credential as the Actions secret `XAI_API_KEY` under **Settings > Secrets and variables > Actions**. The key is injected only while the workflow runs and is never stored in the repository or dashboard. The workflow can also be started on demand from **Actions > Morning dashboard refresh > Run workflow**.
+
+For a local fallback:
+
+1. Double-click `refresh-and-publish-balanced.cmd` for the same recommended curated edition.
 2. Leave the window open while the source passes and quality checks run.
 3. If every source lane succeeds, the workflow updates the shared GitHub Pages dashboard automatically.
 4. After major afternoon earnings or announcements, double-click `refresh-and-publish-catch-up.cmd`. This lighter pass retains the morning account and newsletter scans, with a five-request / $0.60 stop-limit.
@@ -19,7 +25,7 @@ The public page is never changed after a partial or failed refresh. The command 
 
 For a local-only update, double-click `outputs\refresh-relevant-posts.cmd`. The resulting dashboard opens as `outputs\signal-desk-live.html` without changing the shared link.
 
-The refresh is manual by design for the prototype. Every run records the exact per-request cost returned by xAI in `work\xai-refresh-budget.json`; balanced and budget runs also enforce their configured stop limits. xAI reports the exact cost only after a request completes, so the final request can cause a small overshoot; serial execution prevents multiple requests from doing so at once. The last successful result from an individual source lane is retained if another lane fails.
+Every run records the exact per-request cost returned by xAI in `work\xai-refresh-budget.json`; balanced and budget runs also enforce their configured stop limits. xAI reports the exact cost only after a request completes, so the final request can cause a small overshoot; serial execution prevents multiple requests from doing so at once. The last successful result from an individual source lane is retained if another lane fails. Automated run status, request count, cost and runtime appear in that run's GitHub Actions summary.
 
 ## What the refresh does
 
